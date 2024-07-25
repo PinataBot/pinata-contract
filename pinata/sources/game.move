@@ -4,11 +4,15 @@ module pinata::game {
     use sui::pay::{Self};
     use sui::sui::SUI;
     use sui::package::{Self, Publisher};
+    use sui::zklogin_verified_issuer::check_zklogin_issuer;
+
+    use std::string::{Self};
 
     const ENotAuthorized :u64 = 0;
     const EGameInactive :u64 = 1;
     const EInvalidPrizeValue :u64 = 2;
     const EInvalidTaps :u64 = 3;
+    const EInvalidProof :u64 = 4;
 
     public struct GAME has drop {}
 
@@ -59,8 +63,9 @@ module pinata::game {
         claim_prize(game, ctx);
     }
 
-    public fun tap(game: &mut Game, ctx: &mut TxContext){
+    public fun tap(game: &mut Game, address_seed: u256, ctx: &mut TxContext){
         check_game_active(game);
+        assert_sender_zklogin(address_seed, ctx);
 
         game.taps = game.taps - 1;
 
@@ -85,6 +90,13 @@ module pinata::game {
 
     fun set_winner(game: &mut Game, ctx: &TxContext){
         game.winner = option::some(ctx.sender());
+    }
+
+    fun assert_sender_zklogin(address_seed: u256, ctx: &TxContext) {
+        let sender = ctx.sender();
+        // todo: Find out how we can specify the google client id
+        let issuer = string::utf8(b"https://accounts.google.com");
+        assert!(check_zklogin_issuer(sender, address_seed, &issuer), EInvalidProof);
     }
 
     fun check_game_active(game: &Game){
