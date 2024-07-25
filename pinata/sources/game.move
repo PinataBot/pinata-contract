@@ -32,7 +32,7 @@ module pinata::game {
     }
 
     public fun new(cap: &Publisher, taps: u64, coin: Coin<SUI>, ctx: &mut TxContext){
-        check_authority(cap);
+        assert_admin(cap);
 
         assert!(taps > 0, EInvalidTaps);
 
@@ -56,15 +56,15 @@ module pinata::game {
     }
 
     public fun cancel(cap: &Publisher, game: &mut Game, ctx: &mut TxContext){
-        check_authority(cap);
-        check_game_active(game);
+        assert_admin(cap);
+        assert_game_is_active(game);
 
         end_game(game);
         claim_prize(game, ctx);
     }
 
     public fun tap(game: &mut Game, address_seed: u256, ctx: &mut TxContext){
-        check_game_active(game);
+        assert_game_is_active(game);
         assert_sender_zklogin(address_seed, ctx);
 
         game.taps = game.taps - 1;
@@ -99,11 +99,11 @@ module pinata::game {
         assert!(check_zklogin_issuer(sender, address_seed, &issuer), EInvalidProof);
     }
 
-    fun check_game_active(game: &Game){
+    fun assert_game_is_active(game: &Game){
         assert!(game.active, EGameInactive);
     }
     
-    fun check_authority(cap: &Publisher){
+    fun assert_admin(cap: &Publisher){
         assert!(cap.from_module<GAME>(), ENotAuthorized);
     }
 }
