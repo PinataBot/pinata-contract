@@ -1,13 +1,11 @@
 module pinata::game {
     use sui::balance::{Balance};
     use sui::coin::{Self, Coin};
-    use sui::pay::{Self};
+    use sui::pay::{keep};
     use sui::sui::SUI;
     use sui::package::{Self, Publisher};
     use sui::table::{Self, Table};
     use sui::zklogin_verified_issuer::check_zklogin_issuer;
-
-    use std::string::{Self};
 
     const ENotAuthorized :u64 = 0;
     const EGameInactive :u64 = 1;
@@ -62,8 +60,8 @@ module pinata::game {
         assert_admin(cap);
         assert_game_is_active(game);
 
-        end_game(game);
-        claim_prize(game, ctx);
+        game.end();
+        game.claim_prize(ctx);
     }
 
     public fun tap(game: &mut Game, address_seed: u256, ctx: &mut TxContext){
@@ -75,9 +73,9 @@ module pinata::game {
         game.update_leaderboard(ctx);
 
         if (game.taps == 0) {
-            end_game(game);
-            claim_prize(game, ctx);
-            set_winner(game, ctx);
+            game.end();
+            game.claim_prize(ctx);
+            game.set_winner(ctx);
         }
     }
 
@@ -89,20 +87,19 @@ module pinata::game {
             leaderboard.add(sender, 0);
         };
 
-        let address_taps = leaderboard.borrow_mut(sender);
+        let address_taps = &mut leaderboard[sender];
         *address_taps = *address_taps + 1;
     }
 
-    fun end_game(game: &mut Game){
+    fun end(game: &mut Game){
         game.active = false;
     }
-    
     
     fun claim_prize(game: &mut Game, ctx: &mut TxContext){
         let prizeBalance = game.prizeBalance.extract();
         let prizeCoin = coin::from_balance(prizeBalance, ctx);
 
-        pay::keep(prizeCoin, ctx);
+        keep(prizeCoin, ctx);
     }
 
     fun set_winner(game: &mut Game, ctx: &TxContext){
@@ -112,7 +109,7 @@ module pinata::game {
     fun assert_sender_zklogin(address_seed: u256, ctx: &TxContext) {
         let sender = ctx.sender();
         // todo: Find out how we can specify the google client id
-        let issuer = string::utf8(b"https://accounts.google.com");
+        let issuer = std::string::utf8(b"https://accounts.google.com");
         assert!(check_zklogin_issuer(sender, address_seed, &issuer), EInvalidProof);
     }
 
