@@ -33,8 +33,10 @@ module pinata::game {
         assert!(taps > 0, EInvalidTaps);
 
         let id = object::new(ctx);
+
         let prizeValue = coin.value();
         assert!(prizeValue > 0, EInvalidPrizeValue);
+
         let prizeBalance = coin.into_balance();
 
         let game = Game {
@@ -53,8 +55,7 @@ module pinata::game {
         check_authority(cap);
         check_game_active(game);
 
-        game.active = false;
-
+        end_game(game);
         claim_prize(game, ctx);
     }
 
@@ -64,18 +65,26 @@ module pinata::game {
         game.taps = game.taps - 1;
 
         if (game.taps == 0) {
-            game.active = false;
-            game.winner = option::some(ctx.sender());
+            end_game(game);
             claim_prize(game, ctx);
+            set_winner(game, ctx);
         }
     }
 
-
+    fun end_game(game: &mut Game){
+        game.active = false;
+    }
+    
+    
     fun claim_prize(game: &mut Game, ctx: &mut TxContext){
         let prizeBalance = game.prizeBalance.extract();
         let prizeCoin = coin::from_balance(prizeBalance, ctx);
 
         pay::keep(prizeCoin, ctx);
+    }
+
+    fun set_winner(game: &mut Game, ctx: &TxContext){
+        game.winner = option::some(ctx.sender());
     }
 
     fun check_game_active(game: &Game){
