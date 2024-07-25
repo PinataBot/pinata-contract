@@ -4,6 +4,7 @@ module pinata::game {
     use sui::pay::{Self};
     use sui::sui::SUI;
     use sui::package::{Self, Publisher};
+    use sui::table::{Self, Table};
     use sui::zklogin_verified_issuer::check_zklogin_issuer;
 
     use std::string::{Self};
@@ -22,6 +23,7 @@ module pinata::game {
         prizeValue: u64,
         prizeBalance: Option<Balance<SUI>>,
         taps: u64,
+        leaderboard: Table<address, u64>,
         winner: Option<address>,
     }
 
@@ -49,6 +51,7 @@ module pinata::game {
             prizeValue,
             prizeBalance: option::some(prizeBalance),
             taps,
+            leaderboard: table::new(ctx),
             winner: option::none(),
         };
 
@@ -69,11 +72,25 @@ module pinata::game {
 
         game.taps = game.taps - 1;
 
+        game.update_leaderboard(ctx);
+
         if (game.taps == 0) {
             end_game(game);
             claim_prize(game, ctx);
             set_winner(game, ctx);
         }
+    }
+
+    fun update_leaderboard(game: &mut Game, ctx: &TxContext){  
+        let sender = ctx.sender();
+        let leaderboard = &mut game.leaderboard;
+
+        if (!leaderboard.contains(sender)) {
+            leaderboard.add(sender, 0);
+        };
+
+        let address_taps = leaderboard.borrow_mut(sender);
+        *address_taps = *address_taps + 1;
     }
 
     fun end_game(game: &mut Game){
