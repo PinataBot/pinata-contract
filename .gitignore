@@ -1,3 +1,4 @@
-pinata/.idea
-pinata/Move.lock
-pinata/build
+.idea
+break_sui_pinata/.idea
+break_sui_pinata/Move.lock
+break_sui_pinata/build

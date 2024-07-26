@@ -1,4 +1,4 @@
-module pinata::game {
+module break_sui_pinata::game {
     use sui::balance::{Balance};
     use sui::coin::{Self, Coin};
     use sui::pay::{keep};
