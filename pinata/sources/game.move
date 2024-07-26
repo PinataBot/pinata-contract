@@ -18,10 +18,10 @@ module pinata::game {
     public struct Game has key {
         id: UID,
         active: bool,
-        prizeValue: u64,
-        prizeBalance: Option<Balance<SUI>>,
+        prize_value: u64,
+        prize_balance: Option<Balance<SUI>>,
         taps: u64,
-        leaderboard: Table<address, u64>,
+        taps_per_address: Table<address, u64>,
         winner: Option<address>,
     }
 
@@ -31,6 +31,8 @@ module pinata::game {
         transfer::public_transfer(publisher, ctx.sender());
     }
 
+    // ========================= PUBLIC MUTABLE FUNCTIONS =========================
+
     public fun new(cap: &Publisher, taps: u64, coin: Coin<SUI>, ctx: &mut TxContext){
         assert_admin(cap);
 
@@ -38,18 +40,18 @@ module pinata::game {
 
         let id = object::new(ctx);
 
-        let prizeValue = coin.value();
-        assert!(prizeValue > 0, EInvalidPrizeValue);
+        let prize_value = coin.value();
+        assert!(prize_value > 0, EInvalidPrizeValue);
 
-        let prizeBalance = coin.into_balance();
+        let prize_balance = coin.into_balance();
 
         let game = Game {
             id,
             active: true,
-            prizeValue,
-            prizeBalance: option::some(prizeBalance),
+            prize_value,
+            prize_balance: option::some(prize_balance),
             taps,
-            leaderboard: table::new(ctx),
+            taps_per_address: table::new(ctx),
             winner: option::none(),
         };
 
@@ -70,7 +72,7 @@ module pinata::game {
 
         game.taps = game.taps - 1;
 
-        game.update_leaderboard(ctx);
+        game.update_taps_per_address(ctx);
 
         if (game.taps == 0) {
             game.end();
@@ -79,15 +81,20 @@ module pinata::game {
         }
     }
 
-    fun update_leaderboard(game: &mut Game, ctx: &TxContext){  
-        let sender = ctx.sender();
-        let leaderboard = &mut game.leaderboard;
+    // ========================= PUBLIC VIEW FUNCTIONS =========================
 
-        if (!leaderboard.contains(sender)) {
-            leaderboard.add(sender, 0);
+
+    // ========================= PRIVATE FUNCTIONS =========================
+
+    fun update_taps_per_address(game: &mut Game, ctx: &TxContext){  
+        let sender = ctx.sender();
+        let taps_per_address = &mut game.taps_per_address;
+
+        if (!taps_per_address.contains(sender)) {
+            taps_per_address.add(sender, 0);
         };
 
-        let address_taps = &mut leaderboard[sender];
+        let address_taps = &mut taps_per_address[sender];
         *address_taps = *address_taps + 1;
     }
 
@@ -96,10 +103,10 @@ module pinata::game {
     }
     
     fun claim_prize(game: &mut Game, ctx: &mut TxContext){
-        let prizeBalance = game.prizeBalance.extract();
-        let prizeCoin = coin::from_balance(prizeBalance, ctx);
+        let prize_balance = game.prize_balance.extract();
+        let prize_coin = coin::from_balance(prize_balance, ctx);
 
-        keep(prizeCoin, ctx);
+        keep(prize_coin, ctx);
     }
 
     fun set_winner(game: &mut Game, ctx: &TxContext){
