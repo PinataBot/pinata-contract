@@ -83,6 +83,10 @@ module pinata::game {
 
     // ========================= PUBLIC VIEW FUNCTIONS =========================
 
+    public fun get_address_taps(game: &Game, address: address): u64 {
+        game.taps_per_address[address]
+    }
+
 
     // ========================= PRIVATE FUNCTIONS =========================
 
