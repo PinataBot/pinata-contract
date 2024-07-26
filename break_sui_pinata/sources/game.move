@@ -5,25 +5,54 @@ module break_sui_pinata::game {
     use sui::sui::SUI;
     use sui::package::{Self, Publisher};
     use sui::table::{Self, Table};
+    use sui::event::{emit};
     use sui::zklogin_verified_issuer::check_zklogin_issuer;
 
+    // ========================= ERRORS =========================
+    
     const ENotAuthorized :u64 = 0;
     const EGameInactive :u64 = 1;
-    const EInvalidPrizeValue :u64 = 2;
+    const EInvalidPrizeBalance :u64 = 2;
     const EInvalidTaps :u64 = 3;
     const EInvalidProof :u64 = 4;
 
+    // ========================= STRUCTS =========================
+    
     public struct GAME has drop {}
 
     public struct Game has key {
         id: UID,
         active: bool,
-        prize_value: u64,
-        prize_balance: Option<Balance<SUI>>,
+        prize: Option<Balance<SUI>>,
         taps: u64,
         taps_per_address: Table<address, u64>,
         winner: Option<address>,
+        // Not mutable
+        initial_prize: u64,
+        initial_taps: u64,
     }
+
+    // ========================= EVENTS =========================
+
+    public struct GameCreated has copy, drop {
+        game: ID,
+    }
+
+    public struct GameEnded has copy, drop {
+        game: ID,
+        winner: address,
+    }
+
+    public struct GameCancelled has copy, drop {
+        game: ID,
+    }
+
+    public struct Tapped has copy, drop {
+        game: ID,
+        address: address,
+    }
+
+    // ========================= INITIALIZATION =========================
 
     fun init(otw: GAME, ctx: &mut TxContext) {
         let publisher = package::claim(otw, ctx);
@@ -33,27 +62,29 @@ module break_sui_pinata::game {
 
     // ========================= PUBLIC MUTABLE FUNCTIONS =========================
 
+    // ========================= ADMIN FUNCTIONS 
+
     public fun new(cap: &Publisher, taps: u64, coin: Coin<SUI>, ctx: &mut TxContext){
         assert_admin(cap);
 
         assert!(taps > 0, EInvalidTaps);
-
         let id = object::new(ctx);
-
-        let prize_value = coin.value();
-        assert!(prize_value > 0, EInvalidPrizeValue);
-
-        let prize_balance = coin.into_balance();
+        let prize = coin.into_balance();
+        let initial_prize = prize.value();
+        assert!(initial_prize > 0, EInvalidPrizeBalance);
 
         let game = Game {
             id,
             active: true,
-            prize_value,
-            prize_balance: option::some(prize_balance),
+            prize: option::some(prize),
             taps,
             taps_per_address: table::new(ctx),
             winner: option::none(),
+            initial_prize,
+            initial_taps: taps,
         };
+
+        emit(GameCreated { game: object::id(&game)});
 
         transfer::share_object(game)
     }
@@ -61,24 +92,25 @@ module break_sui_pinata::game {
     public fun cancel(cap: &Publisher, game: &mut Game, ctx: &mut TxContext){
         assert_admin(cap);
         assert_game_is_active(game);
+        
+        emit(GameCancelled { game: object::id(game)});
 
-        game.end();
-        game.claim_prize(ctx);
+        game.end(ctx);
     }
+
+    // ========================= PLAYER FUNCTIONS
 
     public fun tap(game: &mut Game, address_seed: u256, ctx: &mut TxContext){
         assert_game_is_active(game);
         assert_sender_zklogin(address_seed, ctx);
 
+        emit(Tapped { game: object::id(game), address: ctx.sender()});
+        
         game.taps = game.taps - 1;
 
         game.update_taps_per_address(ctx);
 
-        if (game.taps == 0) {
-            game.end();
-            game.claim_prize(ctx);
-            game.set_winner(ctx);
-        }
+        if (game.taps == 0) game.end(ctx);
     }
 
     // ========================= PUBLIC VIEW FUNCTIONS =========================
@@ -86,7 +118,6 @@ module break_sui_pinata::game {
     public fun get_address_taps(game: &Game, address: address): u64 {
         game.taps_per_address[address]
     }
-
 
     // ========================= PRIVATE FUNCTIONS =========================
 
@@ -102,19 +133,14 @@ module break_sui_pinata::game {
         *address_taps = *address_taps + 1;
     }
 
-    fun end(game: &mut Game){
+    fun end(game: &mut Game, ctx: &mut TxContext){
+        let winner = ctx.sender();
+        
+        emit(GameEnded { game: object::id(game), winner});
+
         game.active = false;
-    }
-    
-    fun claim_prize(game: &mut Game, ctx: &mut TxContext){
-        let prize_balance = game.prize_balance.extract();
-        let prize_coin = coin::from_balance(prize_balance, ctx);
-
-        keep(prize_coin, ctx);
-    }
-
-    fun set_winner(game: &mut Game, ctx: &TxContext){
-        game.winner = option::some(ctx.sender());
+        game.winner = option::some(winner);
+        keep(coin::from_balance(game.prize.extract(), ctx), ctx);
     }
 
     fun assert_sender_zklogin(address_seed: u256, ctx: &TxContext) {
