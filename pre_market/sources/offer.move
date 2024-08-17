@@ -15,7 +15,7 @@ module pre_market::offer {
 
     // ========================= CONSTANTS =========================
 
-    // ========================= STATUSES 
+    // ========================= Statuses 
     const ACTIVE: u8 = 0;
     const CANCELLED: u8 = 1;
     const FILLED: u8 = 2;
