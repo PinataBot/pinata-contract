@@ -2,23 +2,17 @@ module pre_market::market {
     use whusdce::coin::COIN as USDC;
     use pre_market::utils::{withdraw_balance};
 
-    use sui::coin::{Self, Coin};
-    use sui::sui::{SUI};
+    use sui::coin::{Coin};
     use sui::balance::{Balance};
     use sui::package::{Self, Publisher};
-    use sui::object::{Self};
     use sui::balance::{Self};
     use sui::table::{Self, Table};
     use sui::url::{Self, Url};
-    use sui::pay::{keep};
     use sui::event::{emit};
     use sui::clock::Clock;
-    use sui::vec_set::{Self};
     
     use std::string::{String};
-    use std::ascii::{Self};
     use std::type_name::{Self};
-    use std::vector::{Self};
 
     // ========================= CONSTANTS =========================
     // ========================= Statuses

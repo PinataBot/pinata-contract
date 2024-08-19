@@ -1,20 +1,13 @@
 module pre_market::offer {
-    use pre_market::market::{Self, Market};
+    use pre_market::market::{Market};
     use pre_market::utils::{withdraw_balance};
     use whusdce::coin::COIN as USDC;
 
-    use sui::coin::{Self, Coin};
-    use sui::sui::{SUI};
+    use sui::coin::{Coin};
     use sui::balance::{Balance};
-    use sui::package::{Self};
-    use sui::object::{Self};
     use sui::balance::{Self};
-    use sui::pay::{keep};
     use sui::event::{emit};
     use sui::clock::Clock;
-
-    use std::string::{String};
-    use std::type_name::{Self};
 
     // ========================= CONSTANTS =========================
 
@@ -253,7 +246,10 @@ module pre_market::offer {
     }
     
     // ========================= TESTS =========================
+    #[test_only] use pre_market::market;
+    
     #[test_only] use sui::test_scenario as ts;
+    #[test_only] use sui::coin;
 
     #[test]
     fun test_payment() {
