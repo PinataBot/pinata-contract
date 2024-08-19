@@ -2,7 +2,7 @@ module pre_market::market {
     use whusdce::coin::COIN as USDC;
     use pre_market::utils::{withdraw_balance};
 
-    use sui::coin::{Coin};
+    use sui::coin::{Self, Coin};
     use sui::balance::{Balance};
     use sui::package::{Self, Publisher};
     use sui::balance::{Self};
@@ -17,9 +17,8 @@ module pre_market::market {
     // ========================= CONSTANTS =========================
     // ========================= Statuses
     const ACTIVE: u8 = 0;
-    const CANCELLED: u8 = 1;
-    const SETTLEMENT: u8 = 2;
-    const CLOSED: u8 = 3;
+    const SETTLEMENT: u8 = 1;
+    const CLOSED: u8 = 2;
     
     const SETTLEMENT_TIME_MS: u64 = 1000 * 60 * 60 * 24; // 24 hours
     const FEE_PERCENTAGE: u64 = 2;
@@ -82,10 +81,6 @@ module pre_market::market {
         market: ID,
     }
 
-    public struct MarketCancelled has copy, drop {
-        market: ID,
-    }
-
     public struct MarketSettlement has copy, drop {
         market: ID,
     }
@@ -106,13 +101,13 @@ module pre_market::market {
 
     // ========================= Write admin functions
 
-    public fun new(cap: &Publisher, name: vector<u8>, ctx: &mut TxContext){
+    public fun new(cap: &Publisher, name: vector<u8>, url: vector<u8>, ctx: &mut TxContext){
         assert_admin(cap);
 
         let market = Market {
             id: object::new(ctx),
             name: name.to_string(),
-            url: url::new_unsafe_from_bytes(name),
+            url: url::new_unsafe_from_bytes(url),
             status: ACTIVE,
             offers: table::new(ctx),
             fee_percentage: FEE_PERCENTAGE,
@@ -122,6 +117,7 @@ module pre_market::market {
             buy_interest: 0,
             total_interest: 0,
             total_volume: 0,
+
             coin_type: option::none(),
             coin_decimals: option::none(),
             settlement_end_timestamp_ms: option::none(),
@@ -132,15 +128,6 @@ module pre_market::market {
         transfer::share_object(market);
     }
 
-    public fun cancel(market: &mut Market, cap: &Publisher, _ctx: &mut TxContext){
-        assert_admin(cap);
-        assert_market_active(market);
-
-        market.status = CANCELLED;
-
-        emit(MarketCancelled { market: object::id(market) });
-    }
-
     public fun settlement(
         market: &mut Market, 
         cap: &Publisher, 
@@ -149,7 +136,6 @@ module pre_market::market {
         clock: &Clock,
     ){
         assert_admin(cap);
-        assert_market_active(market);
 
         market.status = SETTLEMENT;
         market.settlement_end_timestamp_ms = option::some(clock.timestamp_ms() + SETTLEMENT_TIME_MS);
@@ -159,9 +145,10 @@ module pre_market::market {
         emit(MarketSettlement { market: object::id(market) });
     }
 
+    /// Optional function to close the market after the settlement
     public fun close(market: &mut Market, cap: &Publisher, clock: &Clock){
         assert_admin(cap);
-        assert_market_settlement_ended(market, clock);
+        assert_closed(market, clock);
 
         market.status = CLOSED;
 
@@ -184,11 +171,11 @@ module pre_market::market {
 
     // ========================= Write functions
 
-    public(package) fun assert_market_active(market: &Market){
+    public(package) fun assert_active(market: &Market){
         assert!(market.status == ACTIVE, EMarketInactive);
     }
 
-    public(package) fun assert_market_settlement(market: &Market, clock: &Clock){
+    public(package) fun assert_settlement(market: &Market, clock: &Clock){
         assert!(
             market.settlement_end_timestamp_ms.is_some() &&
             clock.timestamp_ms() <= *market.settlement_end_timestamp_ms.borrow(), 
@@ -197,7 +184,7 @@ module pre_market::market {
 
     /// Check if the market settlement is ended 
     /// And the market is ready to be closed
-    public(package) fun assert_market_settlement_ended(market: &Market, clock: &Clock){
+    public(package) fun assert_closed(market: &Market, clock: &Clock){
         assert!(
             market.settlement_end_timestamp_ms.is_some() &&
             clock.timestamp_ms() >= *market.settlement_end_timestamp_ms.borrow(), 
@@ -219,16 +206,16 @@ module pre_market::market {
         market: &mut Market, 
         offer_id: ID, 
         is_buy: bool, 
-        fill: bool, 
+        is_fill: bool, 
         value: u64,
         fee: Coin<USDC>,
         ctx: &TxContext
     ){
-        market.update_offers_table(ctx.sender(), offer_id);
+        market.update_offers(ctx.sender(), offer_id);
 
-        market.balance.join(fee.into_balance());
+        coin::put(&mut market.balance, fee);
 
-        market.update_stats(is_buy, fill, value);
+        market.update_stats(is_buy, is_fill, value);
     }
 
     // ========================= Read functions
@@ -247,7 +234,7 @@ module pre_market::market {
         assert!(cap.from_module<MARKET>(), ENotAuthorized);
     }
 
-    fun update_offers_table(market: &mut Market, address: address, offer_id: ID){
+    fun update_offers(market: &mut Market, address: address, offer_id: ID){
         let offers = &mut market.offers;
         if (!offers.contains(address)) {
             offers.add(address, vector::empty());
@@ -255,8 +242,8 @@ module pre_market::market {
         offers[address].push_back(offer_id);
     }
 
-    fun update_stats(market: &mut Market, is_buy: bool, fill: bool, value: u64){
-        if (fill) {
+    fun update_stats(market: &mut Market, is_buy: bool, is_fill: bool, value: u64){
+        if (is_fill) {
             market.total_volume = market.total_volume + value;
         };
         if (is_buy) {

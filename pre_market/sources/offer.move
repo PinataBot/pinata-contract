@@ -3,7 +3,7 @@ module pre_market::offer {
     use pre_market::utils::{withdraw_balance};
     use whusdce::coin::COIN as USDC;
 
-    use sui::coin::{Coin};
+    use sui::coin::{Self, Coin};
     use sui::balance::{Balance};
     use sui::balance::{Self};
     use sui::event::{emit};
@@ -92,7 +92,7 @@ module pre_market::offer {
         mut coin: Coin<USDC>,
         ctx: &mut TxContext,
     ) {
-        market.assert_market_active();
+        market.assert_active();
         assert!(price > 0, EInvalidPrice);
         assert!(amount > 0, EInvalidAmount);
 
@@ -112,7 +112,7 @@ module pre_market::offer {
         let fee = offer.split_fee(market, &mut coin, ctx);
         market.add_offer(object::id(&offer), offer.is_buy, false, offer.collateral_value, fee, ctx);
 
-        offer.balance.join(coin.into_balance());
+        coin::put(&mut offer.balance, coin);
         
         emit(OfferCreated { offer: object::id(&offer) });
 
@@ -120,8 +120,8 @@ module pre_market::offer {
     }
 
     public fun cancel(offer: &mut Offer, ctx: &mut TxContext) {
-        assert_offer_active(offer);
-        assert_offer_creator(offer, ctx);
+        offer.assert_active();
+        offer.assert_creator(ctx);
 
         withdraw_balance(&mut offer.balance, ctx);
         offer.status = CANCELLED;
@@ -138,13 +138,13 @@ module pre_market::offer {
         mut coin: Coin<USDC>, 
         ctx: &mut TxContext
     ) {
-        market.assert_market_active();
-        assert_offer_active(offer);
+        market.assert_active();
+        offer.assert_active();
 
         let fee = offer.split_fee(market, &mut coin, ctx);
         market.add_offer(object::id(offer), !offer.is_buy, true, offer.collateral_value, fee, ctx);
 
-        offer.balance.join(coin.into_balance());
+        coin::put(&mut offer.balance, coin);
         offer.filler = option::some(ctx.sender());
         offer.status = FILLED;
 
@@ -162,15 +162,15 @@ module pre_market::offer {
         clock: &Clock,
         ctx: &mut TxContext
     ) {
-        market.assert_market_settlement(clock);
-        assert_offer_filled(offer);
+        market.assert_settlement(clock);
+        offer.assert_filled();
 
         let recipient: address;
         if (offer.is_buy) {
-            assert_offer_filler(offer, ctx);
+            offer.assert_filler(ctx);
             recipient = offer.creator;
         } else {
-            assert_offer_creator(offer, ctx);
+            offer.assert_creator(ctx);
             recipient = *offer.filler.borrow();
         };
 
@@ -194,13 +194,13 @@ module pre_market::offer {
         clock: &Clock,
         ctx: &mut TxContext
     ) {
-        market.assert_market_settlement_ended(clock);
-        assert_offer_filled(offer);
+        market.assert_closed(clock);
+        offer.assert_filled();
 
         if (offer.is_buy) {
-            assert_offer_creator(offer, ctx);
+            offer.assert_creator(ctx);
         } else {
-            assert_offer_filler(offer, ctx);
+            offer.assert_filler(ctx);
         };
 
         withdraw_balance(&mut offer.balance, ctx);
@@ -223,33 +223,32 @@ module pre_market::offer {
         fee
     }
 
-    fun assert_offer_active(offer: &Offer) {
+    fun assert_active(offer: &Offer) {
         assert!(offer.status == ACTIVE, EOfferInactive);
     }
 
-    fun assert_offer_filled(offer: &Offer) {
+    fun assert_filled(offer: &Offer) {
         assert!(offer.status == FILLED, EOfferNotFilled);
     }
 
-    fun assert_offer_creator(offer: &Offer, ctx: &TxContext) {
+    fun assert_creator(offer: &Offer, ctx: &TxContext) {
         assert!(offer.creator == ctx.sender(), ENotCreator);
     }
 
-    fun assert_offer_filler(offer: &Offer, ctx: &TxContext) {
+    fun assert_filler(offer: &Offer, ctx: &TxContext) {
         assert!(offer.filler.is_some() && offer.filler.borrow() == ctx.sender(), ENotFiller);
     }
 
     fun assert_valid_settlement<T>(offer: &Offer, market: &Market, coin: &Coin<T>) {
         market.assert_coin_type<T>();
-        let coin_decimals = market.coin_decimals();
-        assert!(coin.value() == offer.amount * (10 as u64).pow(coin_decimals), EInvalidSettlement);
+
+        assert!(coin.value() == offer.amount * 10u64.pow(market.coin_decimals()), EInvalidSettlement);
     }
     
     // ========================= TESTS =========================
     #[test_only] use pre_market::market;
-    
+
     #[test_only] use sui::test_scenario as ts;
-    #[test_only] use sui::coin;
 
     #[test]
     fun test_payment() {
@@ -262,7 +261,7 @@ module pre_market::offer {
         let market = ts::take_shared<Market>(&ts);
 
         // 1 USDC = 10^6
-        let price = 1 * (10 as u64).pow(6);
+        let price = 1 * 10u64.pow(6);
         let amount = 1000;
         let collateral_value = price * amount;
         // std::debug::print(&collater_value);
