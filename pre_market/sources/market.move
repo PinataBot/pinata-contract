@@ -1,5 +1,6 @@
 module pre_market::market {
     use whusdce::coin::COIN as USDC;
+    use pre_market::utils::{withdraw_balance};
 
     use sui::coin::{Self, Coin};
     use sui::sui::{SUI};
@@ -12,6 +13,7 @@ module pre_market::market {
     use sui::pay::{keep};
     use sui::event::{emit};
     use sui::clock::Clock;
+    use sui::vec_set::{Self};
     
     use std::string::{String};
     use std::ascii::{Self};
@@ -32,7 +34,7 @@ module pre_market::market {
 
     const ENotAuthorized :u64 = 0;
     const EMarketInactive :u64 = 1;
-    const EMarketNotClosed :u64 = 2;
+    const EMarketSettlementNotEnded :u64 = 2;
     const EMarketNotSettlement :u64 = 3;
     const EInvalidCoinType :u64 = 4;
 
@@ -73,6 +75,7 @@ module pre_market::market {
 
         /// Coin type of the token to be settled
         coin_type: Option<String>,
+        coin_decimals: Option<u8>,
         /// Settlement end timestamp in milliseconds
         /// The market will be closed after the settlement timestamp
         /// And no more offers can be created or filled
@@ -126,6 +129,7 @@ module pre_market::market {
             total_interest: 0,
             total_volume: 0,
             coin_type: option::none(),
+            coin_decimals: option::none(),
             settlement_end_timestamp_ms: option::none(),
         };
 
@@ -138,35 +142,42 @@ module pre_market::market {
         assert_admin(cap);
         assert_market_active(market);
 
-        emit(MarketCancelled { market: object::id(market) });
-
         market.status = CANCELLED;
+
+        emit(MarketCancelled { market: object::id(market) });
     }
 
-    public fun settlement(market: &mut Market, cap: &Publisher, coin_type: vector<u8>, clock: &Clock, _ctx: &mut TxContext){
+    public fun settlement(
+        market: &mut Market, 
+        cap: &Publisher, 
+        coin_type: vector<u8>, 
+        coin_decimals: u8,
+        clock: &Clock,
+    ){
         assert_admin(cap);
         assert_market_active(market);
-
-        emit(MarketSettlement { market: object::id(market) });
 
         market.status = SETTLEMENT;
         market.settlement_end_timestamp_ms = option::some(clock.timestamp_ms() + SETTLEMENT_TIME_MS);
         market.coin_type = option::some(coin_type.to_string());
+        market.coin_decimals = option::some(coin_decimals);
+
+        emit(MarketSettlement { market: object::id(market) });
     }
 
-    public fun close(market: &mut Market, cap: &Publisher, clock: &Clock, ctx: &mut TxContext){
+    public fun close(market: &mut Market, cap: &Publisher, clock: &Clock){
         assert_admin(cap);
-        assert_market_closable(market, clock);
-
-        emit(MarketClosed { market: object::id(market) });
+        assert_market_settlement_ended(market, clock);
 
         market.status = CLOSED;
+
+        emit(MarketClosed { market: object::id(market) });
     }
 
     public fun withdraw(market: &mut Market, cap: &Publisher, ctx: &mut TxContext){
         assert_admin(cap);
 
-        keep(coin::from_balance(market.balance.withdraw_all(), ctx), ctx);
+        withdraw_balance(&mut market.balance, ctx);
     }
 
     // ========================= Read functions
@@ -185,10 +196,18 @@ module pre_market::market {
 
     public(package) fun assert_market_settlement(market: &Market, clock: &Clock){
         assert!(
-            market.status == SETTLEMENT && 
             market.settlement_end_timestamp_ms.is_some() &&
             clock.timestamp_ms() <= *market.settlement_end_timestamp_ms.borrow(), 
         EMarketNotSettlement);
+    }
+
+    /// Check if the market settlement is ended 
+    /// And the market is ready to be closed
+    public(package) fun assert_market_settlement_ended(market: &Market, clock: &Clock){
+        assert!(
+            market.settlement_end_timestamp_ms.is_some() &&
+            clock.timestamp_ms() >= *market.settlement_end_timestamp_ms.borrow(), 
+        EMarketSettlementNotEnded);
     }
 
     /// Check if the coin type is valid for closing the offer
@@ -202,61 +221,81 @@ module pre_market::market {
 
     /// Update the market offer table
     /// Call when creating an offer or filling an offer
-    public(package) fun add_offer(market: &mut Market, address: address, offer_id: ID){
-        let offers = &mut market.offers;
-        if (!offers.contains(address)) {
-            offers.add(address, vector::empty());
-        };
+    public(package) fun add_offer(
+        market: &mut Market, 
+        offer_id: ID, 
+        is_buy: bool, 
+        fill: bool, 
+        value: u64,
+        fee: Coin<USDC>,
+        ctx: &TxContext
+    ){
+        market.update_offers_table(ctx.sender(), offer_id);
 
-        offers[address].push_back(offer_id);
-    }
+        market.balance.join(fee.into_balance());
 
-    /// Add fee to the market
-    /// Call when creating an offer or filling an offer
-    public(package) fun top_up(market: &mut Market, coin: Coin<USDC>){
-        market.balance.join(coin.into_balance());
-    }
-
-    /// Add sell interest to the market
-    /// Call when creating an sell offer or filling a buy offer
-    public(package) fun add_sell_interest(market: &mut Market, interest: u64){
-        market.sell_interest = market.sell_interest + interest;
-        market.total_interest = market.total_interest + interest;
-    }
-
-    /// Add buy interest to the market
-    /// Call when creating an buy offer or filling a sell offer
-    public(package) fun add_buy_interest(market: &mut Market, interest: u64){
-        market.buy_interest = market.buy_interest + interest;
-        market.total_interest = market.total_interest + interest;
-    }
-
-    /// Add volume to the market
-    /// Call only when filling an offer
-    public(package) fun add_volume(market: &mut Market, volume: u64){
-        market.total_volume = market.total_volume + volume;
+        market.update_stats(is_buy, fill, value);
     }
 
     // ========================= Read functions
 
-    public(package) fun get_percent_fee(market: &Market): u64 {
+    public(package) fun fee_percentage(market: &Market): u64 {
         market.fee_percentage
     }
 
-    // ========================= PRIVATE FUNCTIONS =========================
-
-    /// Check if the market settlement is ended 
-    /// And the market is ready to be closed
-    fun assert_market_closable(market: &Market, clock: &Clock){
-        assert!(
-            market.status == SETTLEMENT && 
-            market.settlement_end_timestamp_ms.is_some() &&
-            clock.timestamp_ms() >= *market.settlement_end_timestamp_ms.borrow(), 
-        EMarketNotClosed);
+    public(package) fun coin_decimals(market: &Market): u8 {
+        *market.coin_decimals.borrow()
     }
+
+    // ========================= PRIVATE FUNCTIONS =========================
     
     fun assert_admin(cap: &Publisher){
         assert!(cap.from_module<MARKET>(), ENotAuthorized);
+    }
+
+    fun update_offers_table(market: &mut Market, address: address, offer_id: ID){
+        let offers = &mut market.offers;
+        if (!offers.contains(address)) {
+            offers.add(address, vector::empty());
+        };
+        offers[address].push_back(offer_id);
+    }
+
+    fun update_stats(market: &mut Market, is_buy: bool, fill: bool, value: u64){
+        if (fill) {
+            market.total_volume = market.total_volume + value;
+        };
+        if (is_buy) {
+            market.buy_interest = market.buy_interest + value;
+        } else {
+            market.sell_interest = market.sell_interest + value;
+        };
+        market.total_interest = market.total_interest + value;
+    }
+
+    // ========================= TEST ONLY FUNCTIONS =========================
+
+    #[test_only]
+    public fun create_test_market(ctx: &mut TxContext) {
+        let market = Market {
+            id: object::new(ctx),
+            name: b"TestTokenMarket".to_string(),
+            url: url::new_unsafe_from_bytes(b"TestUrl"),
+            status: ACTIVE,
+            offers: table::new(ctx),
+            fee_percentage: FEE_PERCENTAGE,
+            balance: balance::zero(),
+
+            sell_interest: 0,
+            buy_interest: 0,
+            total_interest: 0,
+            total_volume: 0,
+            coin_type: option::none(),
+            coin_decimals: option::none(),
+            settlement_end_timestamp_ms: option::none(),
+        };
+        
+        transfer::share_object(market);
     }
 
     // ========================= TESTS =========================
