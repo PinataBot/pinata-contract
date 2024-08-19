@@ -90,9 +90,10 @@ module pre_market::offer {
         price: u64,
         amount: u64,
         mut coin: Coin<USDC>,
+        clock: &Clock,
         ctx: &mut TxContext,
     ) {
-        market.assert_active();
+        market.assert_active(clock);
         assert!(price > 0, EInvalidPrice);
         assert!(amount > 0, EInvalidAmount);
 
@@ -136,9 +137,10 @@ module pre_market::offer {
         offer: &mut Offer, 
         market: &mut Market,
         mut coin: Coin<USDC>, 
+        clock: &Clock,
         ctx: &mut TxContext
     ) {
-        market.assert_active();
+        market.assert_active(clock);
         offer.assert_active();
 
         let fee = offer.split_fee(market, &mut coin, ctx);

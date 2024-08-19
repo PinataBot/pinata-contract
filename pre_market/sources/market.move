@@ -27,8 +27,8 @@ module pre_market::market {
 
     const ENotAuthorized :u64 = 0;
     const EMarketInactive :u64 = 1;
-    const EMarketSettlementNotEnded :u64 = 2;
-    const EMarketNotSettlement :u64 = 3;
+    const EMarketNotSettlement :u64 = 2;
+    const EMarketNotClosed :u64 = 3;
     const EInvalidCoinType :u64 = 4;
 
     // ========================= STRUCTS =========================
@@ -42,9 +42,6 @@ module pre_market::market {
         name: String,
         /// URL of the market
         url: Url,
-        /// Status of the market
-        /// 0 - Active, 1 - Cancelled, 2 - Settlement, 3 - Closed
-        status: u8,
         /// Offers in the market
         /// Key: address of the offer participant, Value: vector of offer IDs participated by the address (created or filled)
         offers: Table<address, vector<ID>>,
@@ -73,6 +70,10 @@ module pre_market::market {
         /// The market will be closed after the settlement timestamp
         /// And no more offers can be created or filled
         settlement_end_timestamp_ms: Option<u64>,
+        
+        //// Status of the market
+        //// 0 - Active, 1 - Settlement, 2 - Closed
+        // status: () -> u8
     }
 
     // ========================= EVENTS =========================
@@ -82,10 +83,6 @@ module pre_market::market {
     }
 
     public struct MarketSettlement has copy, drop {
-        market: ID,
-    }
-
-    public struct MarketClosed has copy, drop {
         market: ID,
     }
 
@@ -101,14 +98,13 @@ module pre_market::market {
 
     // ========================= Write admin functions
 
-    public fun new(cap: &Publisher, name: vector<u8>, url: vector<u8>, ctx: &mut TxContext){
+    public fun new(cap: &Publisher, name: vector<u8>, url: vector<u8>, ctx: &mut TxContext) {
         assert_admin(cap);
 
         let market = Market {
             id: object::new(ctx),
             name: name.to_string(),
             url: url::new_unsafe_from_bytes(url),
-            status: ACTIVE,
             offers: table::new(ctx),
             fee_percentage: FEE_PERCENTAGE,
             balance: balance::zero(),
@@ -134,10 +130,9 @@ module pre_market::market {
         coin_type: vector<u8>, 
         coin_decimals: u8,
         clock: &Clock,
-    ){
+    ) {
         assert_admin(cap);
 
-        market.status = SETTLEMENT;
         market.settlement_end_timestamp_ms = option::some(clock.timestamp_ms() + SETTLEMENT_TIME_MS);
         market.coin_type = option::some(coin_type.to_string());
         market.coin_decimals = option::some(coin_decimals);
@@ -145,23 +140,23 @@ module pre_market::market {
         emit(MarketSettlement { market: object::id(market) });
     }
 
-    /// Optional function to close the market after the settlement
-    public fun close(market: &mut Market, cap: &Publisher, clock: &Clock){
-        assert_admin(cap);
-        assert_closed(market, clock);
-
-        market.status = CLOSED;
-
-        emit(MarketClosed { market: object::id(market) });
-    }
-
-    public fun withdraw(market: &mut Market, cap: &Publisher, ctx: &mut TxContext){
+    public fun withdraw(market: &mut Market, cap: &Publisher, ctx: &mut TxContext) {
         assert_admin(cap);
 
         withdraw_balance(&mut market.balance, ctx);
     }
 
     // ========================= Read functions
+
+    public fun status(market: &Market, clock: &Clock): u8 {
+        if (market.settlement_end_timestamp_ms.is_none()) {
+            ACTIVE
+        } else if (clock.timestamp_ms() <= *market.settlement_end_timestamp_ms.borrow()) {
+            SETTLEMENT
+        } else {
+            CLOSED
+        }
+    }
 
     public fun get_address_offers(market: &Market, address: address): vector<ID> {
         market.offers[address]
@@ -171,29 +166,23 @@ module pre_market::market {
 
     // ========================= Write functions
 
-    public(package) fun assert_active(market: &Market){
-        assert!(market.status == ACTIVE, EMarketInactive);
+    public(package) fun assert_active(market: &Market, clock: &Clock) {
+        assert!(market.status(clock) == ACTIVE, EMarketInactive);
     }
 
-    public(package) fun assert_settlement(market: &Market, clock: &Clock){
-        assert!(
-            market.settlement_end_timestamp_ms.is_some() &&
-            clock.timestamp_ms() <= *market.settlement_end_timestamp_ms.borrow(), 
-        EMarketNotSettlement);
+    public(package) fun assert_settlement(market: &Market, clock: &Clock) {
+        assert!(market.status(clock) == SETTLEMENT, EMarketNotSettlement);
     }
 
     /// Check if the market settlement is ended 
     /// And the market is ready to be closed
-    public(package) fun assert_closed(market: &Market, clock: &Clock){
-        assert!(
-            market.settlement_end_timestamp_ms.is_some() &&
-            clock.timestamp_ms() >= *market.settlement_end_timestamp_ms.borrow(), 
-        EMarketSettlementNotEnded);
+    public(package) fun assert_closed(market: &Market, clock: &Clock) {
+        assert!(market.status(clock) == CLOSED, EMarketNotClosed);
     }
 
     /// Check if the coin type is valid for closing the offer
     /// Call when market is in settlement status
-    public(package) fun assert_coin_type<T>(market: &Market){
+    public(package) fun assert_coin_type<T>(market: &Market) {
         let coin_type = type_name::get_with_original_ids<T>().into_string().into_bytes();
         let market_coin_type = (*market.coin_type.borrow()).into_bytes();
 
@@ -210,7 +199,7 @@ module pre_market::market {
         value: u64,
         fee: Coin<USDC>,
         ctx: &TxContext
-    ){
+    ) {
         market.update_offers(ctx.sender(), offer_id);
 
         coin::put(&mut market.balance, fee);
@@ -230,11 +219,11 @@ module pre_market::market {
 
     // ========================= PRIVATE FUNCTIONS =========================
     
-    fun assert_admin(cap: &Publisher){
+    fun assert_admin(cap: &Publisher) {
         assert!(cap.from_module<MARKET>(), ENotAuthorized);
     }
 
-    fun update_offers(market: &mut Market, address: address, offer_id: ID){
+    fun update_offers(market: &mut Market, address: address, offer_id: ID) {
         let offers = &mut market.offers;
         if (!offers.contains(address)) {
             offers.add(address, vector::empty());
@@ -242,7 +231,7 @@ module pre_market::market {
         offers[address].push_back(offer_id);
     }
 
-    fun update_stats(market: &mut Market, is_buy: bool, is_fill: bool, value: u64){
+    fun update_stats(market: &mut Market, is_buy: bool, is_fill: bool, value: u64) {
         if (is_fill) {
             market.total_volume = market.total_volume + value;
         };
@@ -262,7 +251,6 @@ module pre_market::market {
             id: object::new(ctx),
             name: b"TestTokenMarket".to_string(),
             url: url::new_unsafe_from_bytes(b"TestUrl"),
-            status: ACTIVE,
             offers: table::new(ctx),
             fee_percentage: FEE_PERCENTAGE,
             balance: balance::zero(),
