@@ -88,7 +88,7 @@ module pre_market::offer {
 
     // ========================= PUBLIC FUNCTIONS =========================
 
-    entry fun create(
+    public fun create(
         market: &mut Market,
         is_buy: bool,
         amount: u64,
@@ -124,7 +124,7 @@ module pre_market::offer {
         transfer::share_object(offer);
     }
 
-    entry fun cancel(offer: &mut Offer, ctx: &mut TxContext) {
+    public fun cancel(offer: &mut Offer, ctx: &mut TxContext) {
         offer.assert_active();
         offer.assert_creator(ctx);
 
@@ -137,7 +137,7 @@ module pre_market::offer {
     /// Fill the offer with the USDC deposit
     /// After filling the offer, the balance of the offer is 2 * collateral_value
     /// And users have to wait settlement phase to settle the offer
-    entry fun fill(
+    public fun fill(
         offer: &mut Offer, 
         market: &mut Market,
         mut coin: Coin<USDC>, 
@@ -162,7 +162,7 @@ module pre_market::offer {
     /// After the offer is settled, the balance of the offer is 0
     /// Sender sends coins to the second party and withdraws the USDC deposit from 2 parties
     /// If there are no settlement after settlement phase, the second party can withdraw the USDC deposit from 2 parties
-    entry fun settle<T>(
+    public fun settle<T>(
         offer: &mut Offer,
         market: &Market,
         coin: Coin<T>,
@@ -203,7 +203,7 @@ module pre_market::offer {
     /// Close the offer
     /// After the settlement phase, if the offer is not settled, the second party can close the offer
     /// And withdraw the USDC deposit from 2 parties
-    entry fun close(
+    public fun close(
         offer: &mut Offer,
         market: &Market,
         clock: &Clock,
