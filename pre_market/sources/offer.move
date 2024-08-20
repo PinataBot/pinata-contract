@@ -20,10 +20,12 @@ module pre_market::offer {
     /// If the are no settlement after settlement phase and offer closed
     const CLOSED: u8 = 4;
 
+    const MIN_COLLATERAL_VALUE: u64 = 1_000_000; // 1 USDC
+
     // ========================= ERRORS =========================
 
-    const EInvalidPrice: u64 = 0;
-    const EInvalidAmount: u64 = 1;
+    const EInvalidAmount: u64 = 0;
+    const EInvalidCollateralValue: u64 = 1;
     const EInvalidPayment: u64 = 2;
     const EOfferInactive: u64 = 3;
     const EOfferNotFilled: u64 = 4;
@@ -47,11 +49,11 @@ module pre_market::offer {
         creator: address,
         /// Filled by
         filler: Option<address>,
-        /// Price of one token in USDC
-        price: u64,
-        /// Amount of tokens
+        /// Amount of tokens T to buy/sell
+        /// Amount in Human Readable Format
+        /// Later this amount multiplied by 10^decimals of the token
         amount: u64,
-        /// Total value in USDC. price * amount
+        /// Total value in USDC with 6 decimals
         /// Creator has to deposit this amount in USDC
         /// Filler has to deposit this amount in USDC
         collateral_value: u64,
@@ -86,18 +88,18 @@ module pre_market::offer {
 
     // ========================= PUBLIC FUNCTIONS =========================
 
-    public fun create(
+    entry fun create(
         market: &mut Market,
         is_buy: bool,
-        price: u64,
         amount: u64,
+        collateral_value: u64,
         mut coin: Coin<USDC>,
-        clock: &Clock,
+        clock: &Clock, 
         ctx: &mut TxContext,
     ) {
         market.assert_active(clock);
-        assert!(price > 0, EInvalidPrice);
         assert!(amount > 0, EInvalidAmount);
+        assert!(collateral_value >= MIN_COLLATERAL_VALUE, EInvalidCollateralValue);
 
         let mut offer = Offer {
             id: object::new(ctx),
@@ -106,9 +108,9 @@ module pre_market::offer {
             is_buy,
             creator: ctx.sender(),
             filler: option::none(),
-            price,
+            // price,
             amount,
-            collateral_value: price * amount,
+            collateral_value,
             balance: balance::zero(),
         };
 
@@ -122,7 +124,7 @@ module pre_market::offer {
         transfer::share_object(offer);
     }
 
-    public fun cancel(offer: &mut Offer, ctx: &mut TxContext) {
+    entry fun cancel(offer: &mut Offer, ctx: &mut TxContext) {
         offer.assert_active();
         offer.assert_creator(ctx);
 
@@ -135,7 +137,7 @@ module pre_market::offer {
     /// Fill the offer with the USDC deposit
     /// After filling the offer, the balance of the offer is 2 * collateral_value
     /// And users have to wait settlement phase to settle the offer
-    public fun fill(
+    entry fun fill(
         offer: &mut Offer, 
         market: &mut Market,
         mut coin: Coin<USDC>, 
@@ -160,9 +162,9 @@ module pre_market::offer {
     /// After the offer is settled, the balance of the offer is 0
     /// Sender sends coins to the second party and withdraws the USDC deposit from 2 parties
     /// If there are no settlement after settlement phase, the second party can withdraw the USDC deposit from 2 parties
-    public fun settle<T>(
+    entry fun settle<T>(
         offer: &mut Offer,
-        market: &mut Market,
+        market: &Market,
         coin: Coin<T>,
         clock: &Clock,
         ctx: &mut TxContext
@@ -201,9 +203,9 @@ module pre_market::offer {
     /// Close the offer
     /// After the settlement phase, if the offer is not settled, the second party can close the offer
     /// And withdraw the USDC deposit from 2 parties
-    public fun close(
+    entry fun close(
         offer: &mut Offer,
-        market: &mut Market,
+        market: &Market,
         clock: &Clock,
         ctx: &mut TxContext
     ) {
@@ -232,6 +234,9 @@ module pre_market::offer {
 
     // ========================= PRIVATE FUNCTIONS =========================
 
+    // 1UDSC: 1_000_000
+    // 1_000_000 * 2 / 100 = 20_000
+    // 1_000_000 + 20_000 = 1_020_000 
     fun split_fee(offer: &Offer, market: &Market, coin: &mut Coin<USDC>, ctx: &mut TxContext): Coin<USDC> {        
         let fee_value = offer.collateral_value * market.fee_percentage() / 100;
 
@@ -284,14 +289,16 @@ module pre_market::offer {
         let market = ts::take_shared<Market>(&ts);
 
         // 1 USDC = 10^6
-        let price = 1 * 10u64.pow(6);
+        // 1_100_000 * 2 / 100 = 22_000
+        // 1_100_000 + 22_000 = 1_122_000
+        // 1_100_000 /
+        let collateral_value = 1_100_000;
         let amount = 1000;
-        let collateral_value = price * amount;
-        // std::debug::print(&collater_value);
+        std::debug::print(&collateral_value);
         let fee_value = collateral_value * market.fee_percentage() / 100;
-        // std::debug::print(&fee_value);
+        std::debug::print(&fee_value);
         let coin_value = collateral_value + fee_value;
-        // std::debug::print(&coin_value);
+        std::debug::print(&coin_value);
 
         let mut coin = coin::mint_for_testing<USDC>(coin_value, ts::ctx(&mut ts));
         ts::next_tx(&mut ts, sender);
@@ -305,9 +312,9 @@ module pre_market::offer {
             is_buy: true,
             creator: sender,
             filler: option::none(),
-            price,
+            // price,
             amount,
-            collateral_value: price * amount,
+            collateral_value,
             balance: balance::zero(),
         };
         transfer::share_object(offer);

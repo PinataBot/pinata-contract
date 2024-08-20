@@ -22,17 +22,20 @@ module pre_market::market {
     const SETTLEMENT: u8 = 1;
     const CLOSED: u8 = 2;
     
-    const SETTLEMENT_TIME_MS: u64 = 1000 * 60 * 60 * 24; // 24 hours
+    // const SETTLEMENT_TIME_MS: u64 = 1000 * 60 * 60 * 24; // 24 hours
+    const SETTLEMENT_TIME_MS: u64 = 1000 * 60 * 5; // 5 minutes
     const FEE_PERCENTAGE: u64 = 2;
+
+    const PRE_MARKET_SUFFIX: vector<u8> = b"Pre Market ";
 
     // ========================= ERRORS =========================
 
-    //todo: change to #[error]
     const ENotAuthorized :u64 = 0;
     const EMarketInactive :u64 = 1;
     const EMarketNotSettlement :u64 = 2;
     const EMarketNotClosed :u64 = 3;
     const EInvalidCoinType :u64 = 4;
+
 
     // ========================= STRUCTS =========================
 
@@ -43,7 +46,9 @@ module pre_market::market {
         id: UID,
         /// Name of the market
         name: String,
-        /// URL of the market
+        /// Symbol of the token
+        symbol: String,
+        /// URL of info about the token
         url: Url,
         /// Offers in the market
         /// Key: address of the offer participant, Value: vector of offer IDs participated by the address (created or filled)
@@ -67,6 +72,7 @@ module pre_market::market {
         /// Settlement details
 
         /// Coin type of the token to be settled
+        /// !!! Type without 0x prefix
         coin_type: Option<String>,
         coin_decimals: Option<u8>,
         /// Settlement end timestamp in milliseconds
@@ -105,12 +111,13 @@ module pre_market::market {
 
     // ========================= Write admin functions
 
-    public fun new(cap: &Publisher, name: vector<u8>, url: vector<u8>, ctx: &mut TxContext) {
+    entry fun new(cap: &Publisher, name: vector<u8>, symbol: vector<u8>, url: vector<u8>, ctx: &mut TxContext) {
         assert_admin(cap);
 
         let market = Market {
             id: object::new(ctx),
-            name: name.to_string(),
+            name: generate_market_name(name),
+            symbol: symbol.to_string(),
             url: url::new_unsafe_from_bytes(url),
             offers: table::new(ctx),
             fee_percentage: FEE_PERCENTAGE,
@@ -131,10 +138,10 @@ module pre_market::market {
         transfer::share_object(market);
     }
 
-    public fun settlement(
+    entry fun settlement(
         market: &mut Market, 
         cap: &Publisher, 
-        // 0x76cb819b01abed502bee8a702b4c2d547532c12f25001c9dea795a5e631c26f1::fud::FUD
+        // 76cb819b01abed502bee8a702b4c2d547532c12f25001c9dea795a5e631c26f1::fud::FUD
         coin_type: vector<u8>, 
         // 5
         coin_decimals: u8,
@@ -151,7 +158,7 @@ module pre_market::market {
 
     /// Optional function to unsettle the market
     /// Call this function there are settlement issues
-    public fun unsettlement(market: &mut Market, cap: &Publisher) {
+    entry fun unsettlement(market: &mut Market, cap: &Publisher) {
         assert_admin(cap);
 
         market.settlement_end_timestamp_ms = option::none();
@@ -161,7 +168,7 @@ module pre_market::market {
         emit(MarketUnsettlement { market: object::id(market) });
     }
 
-    public fun withdraw(market: &mut Market, cap: &Publisher, ctx: &mut TxContext) {
+    entry fun withdraw(market: &mut Market, cap: &Publisher, ctx: &mut TxContext) {
         assert_admin(cap);
 
         withdraw_balance(&mut market.balance, ctx);
@@ -264,6 +271,13 @@ module pre_market::market {
         market.total_interest = market.total_interest + value;
     }
 
+    fun generate_market_name(name: vector<u8>): String {
+        let mut market_name = b"".to_string();
+        market_name.append(PRE_MARKET_SUFFIX.to_string());
+        market_name.append(name.to_string());
+        market_name
+    }
+
     // ========================= TEST ONLY FUNCTIONS =========================
 
     #[test_only]
@@ -271,6 +285,7 @@ module pre_market::market {
         let market = Market {
             id: object::new(ctx),
             name: b"TestTokenMarket".to_string(),
+            symbol: b"TTM".to_string(),
             url: url::new_unsafe_from_bytes(b"TestUrl"),
             offers: table::new(ctx),
             fee_percentage: FEE_PERCENTAGE,
