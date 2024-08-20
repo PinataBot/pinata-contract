@@ -142,6 +142,7 @@ module pre_market::offer {
     ) {
         market.assert_active(clock);
         offer.assert_active();
+        offer.assert_not_creator(ctx);
 
         let fee = offer.split_fee(market, &mut coin, ctx);
         market.add_offer(object::id(offer), !offer.is_buy, true, offer.collateral_value, fee, ctx);
@@ -235,6 +236,10 @@ module pre_market::offer {
 
     fun assert_creator(offer: &Offer, ctx: &TxContext) {
         assert!(offer.creator == ctx.sender(), ENotCreator);
+    }
+
+    fun assert_not_creator(offer: &Offer, ctx: &TxContext) {
+        assert!(offer.creator != ctx.sender(), ENotCreator);
     }
 
     fun assert_filler(offer: &Offer, ctx: &TxContext) {
