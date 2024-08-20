@@ -15,7 +15,9 @@ module pre_market::offer {
     const ACTIVE: u8 = 0;
     const CANCELLED: u8 = 1;
     const FILLED: u8 = 2;
+    /// If the is settlement during settlement phase
     const SETTLED: u8 = 3;
+    /// If the are no settlement after settlement phase and offer closed
     const CLOSED: u8 = 4;
 
     // ========================= ERRORS =========================
@@ -132,7 +134,7 @@ module pre_market::offer {
 
     /// Fill the offer with the USDC deposit
     /// After filling the offer, the balance of the offer is 2 * collateral_value
-    /// And userts have to wait settlement phase to settle the offer
+    /// And users have to wait settlement phase to settle the offer
     public fun fill(
         offer: &mut Offer, 
         market: &mut Market,
@@ -170,9 +172,17 @@ module pre_market::offer {
 
         let recipient: address;
         if (offer.is_buy) {
+            // Maxim - Buy, Ernest - Sell
+            // Ernest settles tokens
+            // Maxim receives tokens
+            // Ernest receives USDC deposit from 2 parties
             offer.assert_filler(ctx);
             recipient = offer.creator;
         } else {
+            // Maxim - Sell, Ernest - Buy
+            // Maxim settles tokens
+            // Ernest receives tokens
+            // Maxim receives USDC deposit from 2 parties
             offer.assert_creator(ctx);
             recipient = *offer.filler.borrow();
         };
@@ -201,8 +211,14 @@ module pre_market::offer {
         offer.assert_filled();
 
         if (offer.is_buy) {
+            // Maxim - Buy, Ernest - Sell
+            // Ernest doesn't settle tokens
+            // Maxim can close the offer and withdraw the USDC deposit from 2 parties
             offer.assert_creator(ctx);
         } else {
+            // Maxim - Sell, Ernest - Buy
+            // Maxim doesn't settle tokens
+            // Ernest can close the offer and withdraw the USDC deposit from 2 parties
             offer.assert_filler(ctx);
         };
 

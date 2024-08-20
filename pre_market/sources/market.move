@@ -16,7 +16,9 @@ module pre_market::market {
 
     // ========================= CONSTANTS =========================
     // ========================= Statuses
+    /// Active/Trading Phase
     const ACTIVE: u8 = 0;
+    /// Settlement/Delivery Phase
     const SETTLEMENT: u8 = 1;
     const CLOSED: u8 = 2;
     
@@ -25,6 +27,7 @@ module pre_market::market {
 
     // ========================= ERRORS =========================
 
+    //todo: change to #[error]
     const ENotAuthorized :u64 = 0;
     const EMarketInactive :u64 = 1;
     const EMarketNotSettlement :u64 = 2;
@@ -86,6 +89,10 @@ module pre_market::market {
         market: ID,
     }
 
+    public struct MarketUnsettlement has copy, drop {
+        market: ID,
+    }
+
     // ========================= INIT =========================
 
     fun init(otw: MARKET, ctx: &mut TxContext) {
@@ -127,7 +134,9 @@ module pre_market::market {
     public fun settlement(
         market: &mut Market, 
         cap: &Publisher, 
+        // 0x76cb819b01abed502bee8a702b4c2d547532c12f25001c9dea795a5e631c26f1::fud::FUD
         coin_type: vector<u8>, 
+        // 5
         coin_decimals: u8,
         clock: &Clock,
     ) {
@@ -138,6 +147,18 @@ module pre_market::market {
         market.coin_decimals = option::some(coin_decimals);
 
         emit(MarketSettlement { market: object::id(market) });
+    }
+
+    /// Optional function to unsettle the market
+    /// Call this function there are settlement issues
+    public fun unsettlement(market: &mut Market, cap: &Publisher) {
+        assert_admin(cap);
+
+        market.settlement_end_timestamp_ms = option::none();
+        market.coin_type = option::none();
+        market.coin_decimals = option::none();
+
+        emit(MarketUnsettlement { market: object::id(market) });
     }
 
     public fun withdraw(market: &mut Market, cap: &Publisher, ctx: &mut TxContext) {
