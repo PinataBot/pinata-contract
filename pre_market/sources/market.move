@@ -111,7 +111,7 @@ module pre_market::market {
 
     // ========================= Write admin functions
 
-    public fun new(cap: &Publisher, name: vector<u8>, symbol: vector<u8>, url: vector<u8>, ctx: &mut TxContext) {
+    entry public fun new(cap: &Publisher, name: vector<u8>, symbol: vector<u8>, url: vector<u8>, ctx: &mut TxContext) {
         assert_admin(cap);
 
         let market = Market {
@@ -138,7 +138,7 @@ module pre_market::market {
         transfer::share_object(market);
     }
 
-    public fun settlement(
+    entry public fun settlement(
         market: &mut Market, 
         cap: &Publisher, 
         // 76cb819b01abed502bee8a702b4c2d547532c12f25001c9dea795a5e631c26f1::fud::FUD
@@ -158,7 +158,7 @@ module pre_market::market {
 
     /// Optional function to unsettle the market
     /// Call this function if there are settlement issues
-    public fun unsettlement(market: &mut Market, cap: &Publisher) {
+    entry public fun unsettlement(market: &mut Market, cap: &Publisher) {
         assert_admin(cap);
 
         market.settlement_end_timestamp_ms = option::none();
@@ -168,7 +168,7 @@ module pre_market::market {
         emit(MarketUnsettlement { market: object::id(market) });
     }
 
-    public fun withdraw(market: &mut Market, cap: &Publisher, ctx: &mut TxContext) {
+    entry public fun withdraw(market: &mut Market, cap: &Publisher, ctx: &mut TxContext) {
         assert_admin(cap);
 
         withdraw_balance(&mut market.balance, ctx);
