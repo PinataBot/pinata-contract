@@ -11,6 +11,8 @@ module pre_market::offer {
 
     // ========================= CONSTANTS =========================
 
+    const ONE_USDC: u64 = 1_000_000;
+    
     // ========================= Statuses 
     const ACTIVE: u8 = 0;
     const CANCELLED: u8 = 1;
@@ -19,8 +21,6 @@ module pre_market::offer {
     const SETTLED: u8 = 3;
     /// If the are no settlement after settlement phase and offer closed
     const CLOSED: u8 = 4;
-
-    const MIN_COLLATERAL_VALUE: u64 = 1_000_000; // 1 USDC
 
     // ========================= ERRORS =========================
 
@@ -101,7 +101,7 @@ module pre_market::offer {
     ) {
         market.assert_active(clock);
         assert!(amount > 0, EInvalidAmount);
-        assert!(collateral_value >= MIN_COLLATERAL_VALUE, EInvalidCollateralValue);
+        assert!(collateral_value >= ONE_USDC, EInvalidCollateralValue);
 
         let mut offer = Offer {
             id: object::new(ctx),
