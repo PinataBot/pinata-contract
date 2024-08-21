@@ -159,7 +159,7 @@ module pre_market::offer {
     /// If there are no settlement after settlement phase, the second party can withdraw the USDC deposit from 2 parties
     entry public fun settle_and_close<T>(
         offer: &mut Offer,
-        market: &Market,
+        market: &mut Market,
         coin: Coin<T>,
         clock: &Clock,
         ctx: &mut TxContext
@@ -192,6 +192,8 @@ module pre_market::offer {
 
         offer.status = CLOSED;
 
+        market.update_closed_offers(object::id(offer));
+
         emit(OfferClosed { offer: object::id(offer) });
     }
 
@@ -200,7 +202,7 @@ module pre_market::offer {
     /// And withdraw the USDC deposit from 2 parties
     entry public fun close(
         offer: &mut Offer,
-        market: &Market,
+        market: &mut Market,
         clock: &Clock,
         ctx: &mut TxContext
     ) {
@@ -223,6 +225,8 @@ module pre_market::offer {
 
         offer.status = CLOSED;
 
+        market.update_closed_offers(object::id(offer));
+        
         emit(OfferClosed { offer: object::id(offer) });
     }
     

@@ -50,9 +50,6 @@ module pre_market::market {
         symbol: String,
         /// URL of info about the token
         url: Url,
-        /// Offers in the market
-        /// Key: address of the offer participant, Value: vector of offer IDs participated by the address (created or filled)
-        offers: Table<address, vector<ID>>,
         /// Fee percentage of the market
         fee_percentage: u64,
         /// Balance of the market
@@ -63,6 +60,19 @@ module pre_market::market {
         //// 0 - Active, 1 - Settlement, 2 - Closed
         // status: () -> u8
 
+        // Tables
+        /// Offers in the market
+        /// Key: address of the offer participant, Value: vector of offer IDs participated by the address (created or filled)
+        address_offers: Table<address, vector<ID>>,
+        /// Buy offers
+        buy_offers: Table<ID, ID>,
+        /// Sell offers
+        sell_offers: Table<ID, ID>,
+        /// Filled offers
+        filled_offers: Table<ID, ID>,
+        /// Closed offers
+        closed_offers: Table<ID, ID>,
+        
         // Market statistics
         /// Average bids: buy_value / buy_amount
         /// Total value of all buy/fill-sell offers
@@ -133,10 +143,14 @@ module pre_market::market {
             name: generate_market_name(name),
             symbol: symbol.to_string(),
             url: url::new_unsafe_from_bytes(url),
-            offers: table::new(ctx),
             fee_percentage: FEE_PERCENTAGE,
             balance: balance::zero(),
             created_at_timestamp_ms: clock.timestamp_ms(),
+            address_offers: table::new(ctx),
+            buy_offers: table::new(ctx),
+            sell_offers: table::new(ctx),
+            filled_offers: table::new(ctx),
+            closed_offers: table::new(ctx),
             total_buy_value: 0,
             total_buy_amount: 0,
             total_sell_value: 0,
@@ -213,7 +227,7 @@ module pre_market::market {
     }
 
     public fun get_address_offers(market: &Market, address: address): vector<ID> {
-        market.offers[address]
+        market.address_offers[address]
     }
     
     // ========================= PUBLIC(PACKAGE) FUNCTIONS =========================
@@ -255,11 +269,15 @@ module pre_market::market {
         fee: Coin<USDC>,
         ctx: &TxContext
     ) {
-        market.update_offers(ctx.sender(), offer_id);
-
-        coin::put(&mut market.balance, fee);
+        market.update_tables(offer_id, is_buy, is_fill, ctx.sender());
 
         market.update_stats(is_buy, is_fill, value, amount);
+
+        coin::put(&mut market.balance, fee);
+    }
+
+    public(package) fun update_closed_offers(market: &mut Market, offer_id: ID) {
+        market.closed_offers.add(offer_id, offer_id);
     }
 
     // ========================= Read functions
@@ -278,12 +296,26 @@ module pre_market::market {
         assert!(cap.from_module<MARKET>(), ENotAuthorized);
     }
 
-    fun update_offers(market: &mut Market, address: address, offer_id: ID) {
-        let offers = &mut market.offers;
-        if (!offers.contains(address)) {
-            offers.add(address, vector::empty());
+    fun update_tables(market: &mut Market, offer_id: ID, is_buy: bool, is_fill: bool, address: address) {
+        // Add offer to the address_offers table
+        // Call for both creator and filler
+        let address_offers = &mut market.address_offers;
+        if (!address_offers.contains(address)) {
+            address_offers.add(address, vector::empty());
         };
-        offers[address].push_back(offer_id);
+        address_offers[address].push_back(offer_id);
+        
+        // Add offers only when creating an offer
+        // Do not add when filling an offer due to mirroring
+        if (!is_fill) {
+            if (is_buy) {
+                market.buy_offers.add(offer_id, offer_id);
+            } else {
+                market.sell_offers.add(offer_id, offer_id);
+            }
+        } else {
+            market.filled_offers.add(offer_id, offer_id);
+        }
     }
 
     fun update_stats(market: &mut Market, is_buy: bool, is_fill: bool, value: u64, amount: u64) {
@@ -315,9 +347,14 @@ module pre_market::market {
             name: b"TestTokenMarket".to_string(),
             symbol: b"TTM".to_string(),
             url: url::new_unsafe_from_bytes(b"TestUrl"),
-            offers: table::new(ctx),
             fee_percentage: FEE_PERCENTAGE,
             balance: balance::zero(),
+            created_at_timestamp_ms: 0,
+            address_offers: table::new(ctx),
+            buy_offers: table::new(ctx),
+            sell_offers: table::new(ctx),
+            filled_offers: table::new(ctx),
+            closed_offers: table::new(ctx),
             total_buy_value: 0,
             total_buy_amount: 0,
             total_sell_value: 0,
@@ -326,7 +363,6 @@ module pre_market::market {
             coin_type: option::none(),
             coin_decimals: option::none(),
             settlement_end_timestamp_ms: option::none(),
-            created_at_timestamp_ms: 0,
         };
         
         transfer::share_object(market);
@@ -337,9 +373,12 @@ module pre_market::market {
     #[test]
     fun test_types_comparison() {
         let v1 = type_name::get_with_original_ids<Market>().into_string().into_bytes();
+        std::debug::print(&v1.to_string());
         
-        let bytes = b"0000000000000000000000000000000000000000000000000000000000000000::market::Market";
-        let v2 = bytes.to_string().into_bytes();
+        let mut address_string = @pre_market.to_string();
+        let module_struct_string = b"::market::Market".to_string();
+        address_string.append(module_struct_string);
+        let v2 = address_string.into_bytes();
 
         assert!(v1 == v2);
     }
