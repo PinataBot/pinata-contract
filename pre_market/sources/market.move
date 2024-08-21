@@ -57,20 +57,27 @@ module pre_market::market {
         fee_percentage: u64,
         /// Balance of the market
         balance: Balance<USDC>,
+        /// Created at timestamp in milliseconds
+        created_at_timestamp_ms: u64,
+        //// Status of the market
+        //// 0 - Active, 1 - Settlement, 2 - Closed
+        // status: () -> u8
 
-        /// Market statistics
-        
-        /// Sell interest of the market
-        sell_interest: u64,
-        /// Buy interest of the market
-        buy_interest: u64,
-        /// Total interest of the market (sell_interest + buy_interest)
-        total_interest: u64,
-        /// Total volume of the market is the sum of all the volumes of the filled offers
+        // Market statistics
+        /// Average bids: buy_value / buy_amount
+        /// Total value of all buy/fill-sell offers
+        total_buy_value: u64,
+        /// Total amount of all buy/fill-sell offers
+        total_buy_amount: u64,
+        /// Average asks: sell_value / sell_amount
+        /// Total value of all sell/fill-buy offers
+        total_sell_value: u64,
+        /// Total amount of all sell/fill-buy offers
+        total_sell_amount: u64,
+        /// Total volume of the filled (traded) offers
         total_volume: u64,
 
-        /// Settlement details
-
+        // Settlement details
         /// Coin type of the token to be settled
         /// !!! Type without 0x prefix
         coin_type: Option<String>,
@@ -79,13 +86,6 @@ module pre_market::market {
         /// The market will be closed after the settlement timestamp
         /// And no more offers can be created or filled
         settlement_end_timestamp_ms: Option<u64>,
-
-        /// Created at timestamp in milliseconds
-        created_at_timestamp_ms: u64,
-        
-        //// Status of the market
-        //// 0 - Active, 1 - Settlement, 2 - Closed
-        // status: () -> u8
     }
 
     // ========================= EVENTS =========================
@@ -132,17 +132,16 @@ module pre_market::market {
             offers: table::new(ctx),
             fee_percentage: FEE_PERCENTAGE,
             balance: balance::zero(),
-
-            sell_interest: 0,
-            buy_interest: 0,
-            total_interest: 0,
+            created_at_timestamp_ms: clock.timestamp_ms(),
+            total_buy_value: 0,
+            total_buy_amount: 0,
+            total_sell_value: 0,
+            total_sell_amount: 0,
             total_volume: 0,
-
             coin_type: option::none(),
             coin_decimals: option::none(),
             settlement_end_timestamp_ms: option::none(),
 
-            created_at_timestamp_ms: clock.timestamp_ms(),
         };
 
         emit(MarketCreated { market: object::id(&market) });
@@ -237,6 +236,7 @@ module pre_market::market {
         is_buy: bool, 
         is_fill: bool, 
         value: u64,
+        amount: u64,
         fee: Coin<USDC>,
         ctx: &TxContext
     ) {
@@ -244,7 +244,7 @@ module pre_market::market {
 
         coin::put(&mut market.balance, fee);
 
-        market.update_stats(is_buy, is_fill, value);
+        market.update_stats(is_buy, is_fill, value, amount);
     }
 
     // ========================= Read functions
@@ -271,16 +271,17 @@ module pre_market::market {
         offers[address].push_back(offer_id);
     }
 
-    fun update_stats(market: &mut Market, is_buy: bool, is_fill: bool, value: u64) {
+    fun update_stats(market: &mut Market, is_buy: bool, is_fill: bool, value: u64, amount: u64) {
         if (is_fill) {
             market.total_volume = market.total_volume + value;
         };
         if (is_buy) {
-            market.buy_interest = market.buy_interest + value;
+            market.total_buy_value = market.total_buy_value + value;
+            market.total_buy_amount = market.total_buy_amount + amount;
         } else {
-            market.sell_interest = market.sell_interest + value;
+            market.total_sell_value = market.total_sell_value + value;
+            market.total_sell_amount = market.total_sell_amount + amount;
         };
-        market.total_interest = market.total_interest + value;
     }
 
     fun generate_market_name(name: vector<u8>): String {
@@ -302,15 +303,14 @@ module pre_market::market {
             offers: table::new(ctx),
             fee_percentage: FEE_PERCENTAGE,
             balance: balance::zero(),
-
-            sell_interest: 0,
-            buy_interest: 0,
-            total_interest: 0,
+            total_buy_value: 0,
+            total_buy_amount: 0,
+            total_sell_value: 0,
+            total_sell_amount: 0,
             total_volume: 0,
             coin_type: option::none(),
             coin_decimals: option::none(),
             settlement_end_timestamp_ms: option::none(),
-
             created_at_timestamp_ms: 0,
         };
         

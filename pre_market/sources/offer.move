@@ -117,7 +117,7 @@ module pre_market::offer {
         };
 
         let fee = offer.split_fee(market, &mut coin, ctx);
-        market.add_offer(object::id(&offer), offer.is_buy, false, offer.collateral_value, fee, ctx);
+        market.add_offer(object::id(&offer), offer.is_buy, false, offer.collateral_value, offer.amount, fee, ctx);
 
         coin::put(&mut offer.balance, coin);
         
@@ -151,7 +151,7 @@ module pre_market::offer {
         offer.assert_not_creator(ctx);
 
         let fee = offer.split_fee(market, &mut coin, ctx);
-        market.add_offer(object::id(offer), !offer.is_buy, true, offer.collateral_value, fee, ctx);
+        market.add_offer(object::id(offer), !offer.is_buy, true, offer.collateral_value, offer.amount, fee, ctx);
 
         coin::put(&mut offer.balance, coin);
         offer.filler = option::some(ctx.sender());
