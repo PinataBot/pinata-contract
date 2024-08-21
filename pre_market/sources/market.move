@@ -15,18 +15,18 @@ module pre_market::market {
     use std::type_name::{Self};
 
     // ========================= CONSTANTS =========================
+
+    const SETTLEMENT_TIME_MS: u64 = 1000 * 60 * 60 * 24; // 24 hours
+    const FEE_PERCENTAGE: u64 = 2;
+
+    const PRE_MARKET_SUFFIX: vector<u8> = b"Pre Market ";
+    
     // ========================= Statuses
     /// Active/Trading Phase
     const ACTIVE: u8 = 0;
     /// Settlement/Delivery Phase
     const SETTLEMENT: u8 = 1;
     const CLOSED: u8 = 2;
-    
-    // const SETTLEMENT_TIME_MS: u64 = 1000 * 60 * 60 * 24; // 24 hours
-    const SETTLEMENT_TIME_MS: u64 = 1000 * 60 * 5; // 5 minutes
-    const FEE_PERCENTAGE: u64 = 2;
-
-    const PRE_MARKET_SUFFIX: vector<u8> = b"Pre Market ";
 
     // ========================= ERRORS =========================
 
@@ -99,6 +99,10 @@ module pre_market::market {
     }
 
     public struct MarketUnsettlement has copy, drop {
+        market: ID,
+    }
+
+    public struct MarketClosed has copy, drop {
         market: ID,
     }
 
@@ -177,6 +181,17 @@ module pre_market::market {
         market.coin_decimals = option::none();
 
         emit(MarketUnsettlement { market: object::id(market) });
+    }
+
+    /// Optional function to close the market
+    /// Call for tests or if the market is not needed anymore
+    /// In usual cases, the market will be closed after the `settlement_end_timestamp_ms` is reached
+    entry public fun close(market: &mut Market, cap: &Publisher, clock: &Clock) {
+        assert_admin(cap);
+
+        market.settlement_end_timestamp_ms = option::some(clock.timestamp_ms());
+
+        emit(MarketClosed { market: object::id(market) });
     }
 
     entry public fun withdraw(market: &mut Market, cap: &Publisher, ctx: &mut TxContext) {
