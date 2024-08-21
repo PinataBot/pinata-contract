@@ -62,6 +62,8 @@ module pre_market::offer {
         /// After the offer is filled, the balance is 2 * collateral_value
         /// After the offer is closed, the balance is 0
         balance: Balance<USDC>,
+        /// Created at timestamp in milliseconds
+        created_at_timestamp_ms: u64,
     }
 
     // ========================= EVENTS =========================
@@ -111,6 +113,7 @@ module pre_market::offer {
             amount,
             collateral_value,
             balance: balance::zero(),
+            created_at_timestamp_ms: clock.timestamp_ms(),
         };
 
         let fee = offer.split_fee(market, &mut coin, ctx);
@@ -315,6 +318,7 @@ module pre_market::offer {
             amount,
             collateral_value,
             balance: balance::zero(),
+            created_at_timestamp_ms: 0,
         };
         transfer::share_object(offer);
         ts::next_tx(&mut ts, sender);

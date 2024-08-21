@@ -79,6 +79,9 @@ module pre_market::market {
         /// The market will be closed after the settlement timestamp
         /// And no more offers can be created or filled
         settlement_end_timestamp_ms: Option<u64>,
+
+        /// Created at timestamp in milliseconds
+        created_at_timestamp_ms: u64,
         
         //// Status of the market
         //// 0 - Active, 1 - Settlement, 2 - Closed
@@ -111,7 +114,14 @@ module pre_market::market {
 
     // ========================= Write admin functions
 
-    entry public fun new(cap: &Publisher, name: vector<u8>, symbol: vector<u8>, url: vector<u8>, ctx: &mut TxContext) {
+    entry public fun new(
+        cap: &Publisher, 
+        name: vector<u8>, 
+        symbol: vector<u8>, 
+        url: vector<u8>,
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
         assert_admin(cap);
 
         let market = Market {
@@ -131,6 +141,8 @@ module pre_market::market {
             coin_type: option::none(),
             coin_decimals: option::none(),
             settlement_end_timestamp_ms: option::none(),
+
+            created_at_timestamp_ms: clock.timestamp_ms(),
         };
 
         emit(MarketCreated { market: object::id(&market) });
@@ -298,6 +310,8 @@ module pre_market::market {
             coin_type: option::none(),
             coin_decimals: option::none(),
             settlement_end_timestamp_ms: option::none(),
+
+            created_at_timestamp_ms: 0,
         };
         
         transfer::share_object(market);
