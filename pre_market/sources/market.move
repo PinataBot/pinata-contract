@@ -372,15 +372,13 @@ module pre_market::market {
 
     #[test]
     fun test_types_comparison() {
-        let v1 = type_name::get_with_original_ids<Market>().into_string().into_bytes();
-        std::debug::print(&v1.to_string());
+        let generated_type = type_name::get_with_original_ids<Market>().into_string();
         
-        let mut address_string = @pre_market.to_string();
-        let module_struct_string = b"::market::Market".to_string();
-        address_string.append(module_struct_string);
-        let v2 = address_string.into_bytes();
+        let mut hardcode_type = b"".to_string();
+        hardcode_type.append(@pre_market.to_string());
+        hardcode_type.append(b"::market::Market".to_string());
 
-        assert!(v1 == v2);
+        assert!(generated_type.into_bytes() == hardcode_type.into_bytes());
     }
 }
 

@@ -288,10 +288,7 @@ module pre_market::offer {
         let market = ts::take_shared<Market>(&ts);
 
         // 1 USDC = 10^6
-        // 1_100_000 * 2 / 100 = 22_000
-        // 1_100_000 + 22_000 = 1_122_000
-        // 1_100_000 /
-        let collateral_value = 1_100_000;
+        let collateral_value = ONE_USDC;
         let amount = 1000;
         std::debug::print(&collateral_value);
         let fee_value = collateral_value * market.fee_percentage() / 100;
