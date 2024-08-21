@@ -12,15 +12,12 @@ module pre_market::offer {
     // ========================= CONSTANTS =========================
 
     const ONE_USDC: u64 = 1_000_000;
-    
+
     // ========================= Statuses 
     const ACTIVE: u8 = 0;
     const CANCELLED: u8 = 1;
     const FILLED: u8 = 2;
-    /// If the is settlement during settlement phase
-    const SETTLED: u8 = 3;
-    /// If the are no settlement after settlement phase and offer closed
-    const CLOSED: u8 = 4;
+    const CLOSED: u8 = 3;
 
     // ========================= ERRORS =========================
 
@@ -77,10 +74,6 @@ module pre_market::offer {
     }
 
     public struct OfferFilled has copy, drop {
-        offer: ID,
-    }
-
-    public struct OfferSettled has copy, drop {
         offer: ID,
     }
 
@@ -164,7 +157,7 @@ module pre_market::offer {
     /// After the offer is settled, the balance of the offer is 0
     /// Sender sends coins to the second party and withdraws the USDC deposit from 2 parties
     /// If there are no settlement after settlement phase, the second party can withdraw the USDC deposit from 2 parties
-    entry public fun settle<T>(
+    entry public fun settle_and_close<T>(
         offer: &mut Offer,
         market: &Market,
         coin: Coin<T>,
@@ -197,9 +190,9 @@ module pre_market::offer {
 
         withdraw_balance(&mut offer.balance, ctx);
 
-        offer.status = SETTLED;
+        offer.status = CLOSED;
 
-        emit(OfferSettled { offer: object::id(offer) });
+        emit(OfferClosed { offer: object::id(offer) });
     }
 
     /// Close the offer
