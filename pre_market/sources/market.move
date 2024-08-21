@@ -2,7 +2,7 @@ module pre_market::market {
     use whusdce::coin::COIN as USDC;
     use pre_market::utils::{withdraw_balance};
 
-    use sui::coin::{Self, Coin};
+    use sui::coin::{Self, Coin, CoinMetadata};
     use sui::balance::{Balance};
     use sui::package::{Self, Publisher};
     use sui::balance::{Self};
@@ -11,7 +11,7 @@ module pre_market::market {
     use sui::event::{emit};
     use sui::clock::Clock;
     
-    use std::string::{String};
+    use std::string::{Self, String};
     use std::type_name::{Self};
 
     // ========================= CONSTANTS =========================
@@ -46,10 +46,8 @@ module pre_market::market {
         id: UID,
         /// Name of the market
         name: String,
-        /// Symbol of the token
-        symbol: String,
         /// URL of info about the token
-        url: Url,
+        url: Url,    
         /// Fee percentage of the market
         fee_percentage: u64,
         /// Balance of the market
@@ -60,7 +58,23 @@ module pre_market::market {
         //// 0 - Active, 1 - Settlement, 2 - Closed
         // status: () -> u8
 
+        // Coin details
+
+        /// Symbol of the token
+        /// Initiate with predicted symbol
+        /// And then update with the actual token symbol in the settlement
+        coin_symbol: String,
+        /// Coin type of the token to be settled
+        /// !!! Type without 0x prefix
+        coin_type: Option<String>,
+        coin_decimals: Option<u8>,
+        /// Settlement end timestamp in milliseconds
+        /// The market will be closed after the settlement timestamp
+        /// And no more offers can be created or filled
+        settlement_end_timestamp_ms: Option<u64>,
+
         // Tables
+
         /// Offers in the market
         /// Key: address of the offer participant, Value: vector of offer IDs participated by the address (created or filled)
         address_offers: Table<address, vector<ID>>,
@@ -74,6 +88,7 @@ module pre_market::market {
         closed_offers: Table<ID, ID>,
         
         // Market statistics
+
         /// Average bids: buy_value / buy_amount
         /// Total value of all buy/fill-sell offers
         total_buy_value: u64,
@@ -86,16 +101,6 @@ module pre_market::market {
         total_sell_amount: u64,
         /// Total volume of the filled (traded) offers
         total_volume: u64,
-
-        // Settlement details
-        /// Coin type of the token to be settled
-        /// !!! Type without 0x prefix
-        coin_type: Option<String>,
-        coin_decimals: Option<u8>,
-        /// Settlement end timestamp in milliseconds
-        /// The market will be closed after the settlement timestamp
-        /// And no more offers can be created or filled
-        settlement_end_timestamp_ms: Option<u64>,
     }
 
     // ========================= EVENTS =========================
@@ -131,8 +136,8 @@ module pre_market::market {
     entry public fun new(
         cap: &Publisher, 
         name: vector<u8>, 
-        symbol: vector<u8>, 
         url: vector<u8>,
+        symbol: vector<u8>, 
         clock: &Clock,
         ctx: &mut TxContext
     ) {
@@ -141,25 +146,27 @@ module pre_market::market {
         let market = Market {
             id: object::new(ctx),
             name: generate_market_name(name),
-            symbol: symbol.to_string(),
             url: url::new_unsafe_from_bytes(url),
             fee_percentage: FEE_PERCENTAGE,
             balance: balance::zero(),
             created_at_timestamp_ms: clock.timestamp_ms(),
+
+            coin_symbol: symbol.to_string(),
+            coin_type: option::none(),
+            coin_decimals: option::none(),
+            settlement_end_timestamp_ms: option::none(),
+            
             address_offers: table::new(ctx),
             buy_offers: table::new(ctx),
             sell_offers: table::new(ctx),
             filled_offers: table::new(ctx),
             closed_offers: table::new(ctx),
+
             total_buy_value: 0,
             total_buy_amount: 0,
             total_sell_value: 0,
             total_sell_amount: 0,
             total_volume: 0,
-            coin_type: option::none(),
-            coin_decimals: option::none(),
-            settlement_end_timestamp_ms: option::none(),
-
         };
 
         emit(MarketCreated { market: object::id(&market) });
@@ -167,20 +174,19 @@ module pre_market::market {
         transfer::share_object(market);
     }
 
-    entry public fun settlement(
+    entry public fun settlement<T>(
         market: &mut Market, 
         cap: &Publisher, 
-        // 76cb819b01abed502bee8a702b4c2d547532c12f25001c9dea795a5e631c26f1::fud::FUD
-        coin_type: vector<u8>, 
-        // 5
-        coin_decimals: u8,
+        coin_metadata: &CoinMetadata<T>,
         clock: &Clock,
     ) {
         assert_admin(cap);
 
         market.settlement_end_timestamp_ms = option::some(clock.timestamp_ms() + SETTLEMENT_TIME_MS);
-        market.coin_type = option::some(coin_type.to_string());
-        market.coin_decimals = option::some(coin_decimals);
+
+        market.coin_type = option::some(string::from_ascii(type_name::get_with_original_ids<T>().into_string()));
+        market.coin_decimals = option::some(coin_metadata.get_decimals());
+        market.coin_symbol = string::from_ascii(coin_metadata.get_symbol());
 
         emit(MarketSettlement { market: object::id(market) });
     }
@@ -345,7 +351,7 @@ module pre_market::market {
         let market = Market {
             id: object::new(ctx),
             name: b"TestTokenMarket".to_string(),
-            symbol: b"TTM".to_string(),
+            coin_symbol: b"TTM".to_string(),
             url: url::new_unsafe_from_bytes(b"TestUrl"),
             fee_percentage: FEE_PERCENTAGE,
             balance: balance::zero(),

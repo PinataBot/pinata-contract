@@ -47,7 +47,7 @@ module pre_market::offer {
         /// Filled by
         filler: Option<address>,
         /// Amount of tokens T to buy/sell
-        /// Amount in Human Readable Format
+        /// Whole amount of the token
         /// Later this amount multiplied by 10^decimals of the token
         amount: u64,
         /// Total value in USDC with 6 decimals
