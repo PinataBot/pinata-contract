@@ -21,12 +21,9 @@ WHUSDCE = { local = "../on_chain_deps/0x5d4b302506645c37ff133b98c4b50a5ae1484165
 
 [addresses]
 # Package address
-pre_market = "0x6d7a1c5e695c20cb2cd87d28337aaa2070bc5f7a1e9439430381ea48458d2f20"
+pre_market = "0xb3012ad492b9592fb748988e76ae903e46c818aaffaf06258c21c28ad5efe4ba"
 
-publisher = "0x3abb5e9afdac398e1f5e6816ad175616fcc72e47cb9cfcec93e619f84d923fb1"
-
-# # Test Market
-fud_pre_market = "0xdb17bada63a4d178d0a6ba18b6a22b88722365a6ac19fe71bf2bc6bb8a992f6a"
+publisher = "0x49c67e4b31cdf383e16baa4ac2e5cc1f783e3f01c1031633f17c212274025552"
 
 # Named addresses will be accessible in Move as `@name`. They're also exported:
 # for example, `std = "0x1"` is exported by the Standard Library.
