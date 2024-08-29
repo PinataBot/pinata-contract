@@ -282,6 +282,13 @@ module pre_market::market {
         coin::put(&mut market.balance, fee);
     }
 
+    /// Cancel the offer
+    /// Only creator can cancel the offer so no need to check the fill status
+    /// No need to delete the offer from the buy/sell tables
+    public(package) fun cancel_offer(market: &mut Market, _offer_id: ID, is_buy: bool, value: u64, amount: u64) {
+        market.reset_stats(is_buy, value, amount);
+    }
+
     public(package) fun update_closed_offers(market: &mut Market, offer_id: ID) {
         market.closed_offers.add(offer_id, offer_id);
     }
@@ -334,6 +341,16 @@ module pre_market::market {
         } else {
             market.total_sell_value = market.total_sell_value + value;
             market.total_sell_amount = market.total_sell_amount + amount;
+        };
+    }
+
+    fun reset_stats(market: &mut Market, is_buy: bool, value: u64, amount: u64) {
+        if (is_buy) {
+            market.total_buy_value = market.total_buy_value - value;
+            market.total_buy_amount = market.total_buy_amount - amount;
+        } else {
+            market.total_sell_value = market.total_sell_value - value;
+            market.total_sell_amount = market.total_sell_amount - amount;
         };
     }
 

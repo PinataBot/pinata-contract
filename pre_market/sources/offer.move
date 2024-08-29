@@ -32,6 +32,13 @@ module pre_market::offer {
 
     // ========================= STRUCTS =========================
 
+    public enum Status {
+        Active,
+        Cancelled,
+        Filled,
+        Closed,
+    }
+
     public struct Offer has key {
         /// Offer ID
         id: UID,
@@ -119,10 +126,12 @@ module pre_market::offer {
         transfer::share_object(offer);
     }
 
-    entry public fun cancel(offer: &mut Offer, ctx: &mut TxContext) {
+    entry public fun cancel(offer: &mut Offer, market: &mut Market, ctx: &mut TxContext) {
         offer.assert_active();
         offer.assert_creator(ctx);
 
+        market.cancel_offer(object::id(offer), offer.is_buy, offer.collateral_value, offer.amount);
+        
         withdraw_balance(&mut offer.balance, ctx);
         offer.status = CANCELLED;
         
