@@ -32,13 +32,6 @@ module pre_market::offer {
 
     // ========================= STRUCTS =========================
 
-    public enum Status {
-        Active,
-        Cancelled,
-        Filled,
-        Closed,
-    }
-
     public struct Offer has key {
         /// Offer ID
         id: UID,
