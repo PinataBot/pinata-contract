@@ -63,7 +63,7 @@ module pre_market::market {
         /// Symbol of the token
         /// Initiate with predicted symbol
         /// And then update with the actual token symbol in the settlement
-        coin_symbol: String,
+        coin_symbol: Option<String>,
         /// Coin type of the token to be settled
         /// !!! Type without 0x prefix
         coin_type: Option<String>,
@@ -151,7 +151,7 @@ module pre_market::market {
             balance: balance::zero(),
             created_at_timestamp_ms: clock.timestamp_ms(),
 
-            coin_symbol: symbol.to_string(),
+            coin_symbol: option::some(symbol.to_string()),
             coin_type: option::none(),
             coin_decimals: option::none(),
             settlement_end_timestamp_ms: option::none(),
@@ -182,11 +182,10 @@ module pre_market::market {
     ) {
         assert_admin(cap);
 
-        market.settlement_end_timestamp_ms = option::some(clock.timestamp_ms() + SETTLEMENT_TIME_MS);
-
+        market.coin_symbol = option::some(string::from_ascii(coin_metadata.get_symbol()));
         market.coin_type = option::some(string::from_ascii(type_name::get_with_original_ids<T>().into_string()));
         market.coin_decimals = option::some(coin_metadata.get_decimals());
-        market.coin_symbol = string::from_ascii(coin_metadata.get_symbol());
+        market.settlement_end_timestamp_ms = option::some(clock.timestamp_ms() + SETTLEMENT_TIME_MS);
 
         emit(MarketSettlement { market: object::id(market) });
     }
@@ -196,9 +195,10 @@ module pre_market::market {
     entry public fun unsettlement(market: &mut Market, cap: &Publisher) {
         assert_admin(cap);
 
-        market.settlement_end_timestamp_ms = option::none();
+        market.coin_symbol = option::none();
         market.coin_type = option::none();
         market.coin_decimals = option::none();
+        market.settlement_end_timestamp_ms = option::none();
 
         emit(MarketUnsettlement { market: object::id(market) });
     }
@@ -368,7 +368,7 @@ module pre_market::market {
         let market = Market {
             id: object::new(ctx),
             name: b"TestTokenMarket".to_string(),
-            coin_symbol: b"TTM".to_string(),
+            coin_symbol: option::some(b"TTM".to_string()),
             url: url::new_unsafe_from_bytes(b"TestUrl"),
             fee_percentage: FEE_PERCENTAGE,
             balance: balance::zero(),
