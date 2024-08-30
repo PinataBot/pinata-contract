@@ -25,6 +25,10 @@ pre_market = "0xb3012ad492b9592fb748988e76ae903e46c818aaffaf06258c21c28ad5efe4ba
 
 publisher = "0x49c67e4b31cdf383e16baa4ac2e5cc1f783e3f01c1031633f17c212274025552"
 
+# Markets
+suins="0x5359a4ce15acc2b8d330083b21092cbb90ef48c4ec3e32167a9e02877806259e"
+deep="0x17c66b598462a259516e2c7cc9de62edd3f4b31f303fc684a6937d708afe703a"
+
 # Named addresses will be accessible in Move as `@name`. They're also exported:
 # for example, `std = "0x1"` is exported by the Standard Library.
 # alice = "0xA11CE"
