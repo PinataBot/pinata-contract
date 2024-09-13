@@ -1,0 +1,17 @@
+[package]
+name = "break_aptos_pinata"
+version = "1.0.0"
+authors = []
+
+[addresses]
+break_aptos_pinata = "4bb9a3ba13442557b24bb6d3f10ed801f4a4ffee439583cf852f3b97f9aaad7c"
+
+[dev-addresses]
+break_aptos_pinata = "0x12345"
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-core.git"
+rev = "mainnet"
+subdir = "aptos-move/framework/aptos-framework"
+
+[dev-dependencies]
