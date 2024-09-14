@@ -176,11 +176,7 @@ module break_aptos_pinata::game {
         let manager_ref = borrow_global<GameManager>(get_admin_address());
         assert!(TableModule::contains(&manager_ref.games, game_id), E_INVALID_GAME_ID);
         let game_ref = TableModule::borrow(&manager_ref.games, game_id);
-        if (TableModule::contains(&game_ref.taps_per_address, addr)) {
-            *TableModule::borrow(&game_ref.taps_per_address, addr)
-        } else {
-            0
-        }
+        *TableModule::borrow(&game_ref.taps_per_address, addr)
     }
 
     // ========================= PRIVATE FUNCTIONS =========================
@@ -230,9 +226,15 @@ module break_aptos_pinata::game {
     use aptos_framework::timestamp;
     #[test_only]
     use aptos_framework::aptos_coin;
+    #[test_only]
+    use aptos_std::debug::print;
 
     #[test_only]
     const ONE_APTOS: u64 = 100000000;
+    #[test_only]
+    const GAME_TAPS: u64 = 10;
+    #[test_only]
+    const GAME_PRIZE: u64 = 1000;
 
     #[test_only]
     fun setup_test(aptos: &signer, admin: &signer, user: &signer) {
@@ -254,5 +256,146 @@ module break_aptos_pinata::game {
 
         timestamp::set_time_has_started_for_testing(aptos);
         init_module(admin);
+    }
+
+    #[test(aptos = @0x1, admin = @break_aptos_pinata, user = @0xA)]
+    fun test_create_game(aptos: &signer, admin: &signer, user: &signer) acquires GameManager {
+        setup_test(aptos, admin, user);
+
+        new(admin, GAME_TAPS, GAME_PRIZE);
+
+        let (active, _prize, _taps, _winner, _initial_prize, _initial_taps) = get_game(0);
+        assert!(active, 1);
+    }
+
+    #[test(aptos = @0x1, admin = @break_aptos_pinata, user = @0xA)]
+    fun test_tap_game(aptos: &signer, admin: &signer, user: &signer) acquires GameManager {
+        let total_user_taps = 3;
+
+        setup_test(aptos, admin, user);
+
+        new(admin, GAME_TAPS, GAME_PRIZE);
+
+        for (i in 0..total_user_taps) {
+            tap(user, 0);
+        };
+
+        let user_taps = get_address_taps(0, address_of(user));
+
+        assert!(user_taps == total_user_taps, 1);
+    }
+
+
+    #[test(aptos = @0x1, admin = @break_aptos_pinata, user = @0xA)]
+    fun test_cancel_game(aptos: &signer, admin: &signer, user: &signer) acquires GameManager {
+        setup_test(aptos, admin, user);
+
+        new(admin, GAME_TAPS, GAME_PRIZE);
+
+        cancel(admin, 0);
+
+        let (active, _prize, _taps, _winner, _initial_prize, _initial_taps) = get_game(0);
+        assert!(!active, 1);
+    }
+
+    #[test(aptos = @0x1, admin = @break_aptos_pinata, user = @0xA)]
+    fun test_winner_game(aptos: &signer, admin: &signer, user: &signer) acquires GameManager {
+        setup_test(aptos, admin, user);
+
+        new(admin, 1, GAME_PRIZE);
+
+        tap(user, 0);
+
+        let (active, _prize, _taps, winner, _initial_prize, _initial_taps) = get_game(0);
+
+        assert!(!active, 1);
+        assert!(winner == some(address_of(user)), 1);
+        assert!(coin::balance<AptosCoin>(address_of(user)) == GAME_PRIZE, 1);
+    }
+
+    #[test(aptos = @0x1, admin = @break_aptos_pinata, user = @0xA)]
+    #[expected_failure(abort_code = E_INVALID_GAME_ID, location = break_aptos_pinata::game)]
+    fun test_get_invalid_game(aptos: &signer, admin: &signer, user: &signer) acquires GameManager {
+        setup_test(aptos, admin, user);
+
+        get_game(0);
+    }
+
+    #[test(aptos = @0x1, admin = @break_aptos_pinata, user = @0xA)]
+    #[expected_failure(abort_code = E_GAME_INACTIVE, location = break_aptos_pinata::game)]
+    fun test_tap_inactive_game(aptos: &signer, admin: &signer, user: &signer) acquires GameManager {
+        setup_test(aptos, admin, user);
+
+        new(admin, GAME_TAPS, GAME_PRIZE);
+        cancel(admin, 0);
+
+        tap(user, 0);
+    }
+
+    #[test(aptos = @0x1, admin = @break_aptos_pinata, user = @0xA)]
+    #[expected_failure(abort_code = E_INVALID_GAME_ID, location = break_aptos_pinata::game)]
+    fun test_tap_invalid_game(aptos: &signer, admin: &signer, user: &signer) acquires GameManager {
+        setup_test(aptos, admin, user);
+
+        tap(user, 0);
+    }
+
+    #[test(aptos = @0x1, admin = @break_aptos_pinata, user = @0xA)]
+    #[expected_failure(abort_code = E_NOT_AUTHORIZED, location = break_aptos_pinata::game)]
+    fun test_create_game_not_admin(aptos: &signer, admin: &signer, user: &signer) acquires GameManager {
+        setup_test(aptos, admin, user);
+
+        new(user, 10, 1000);
+    }
+
+    #[test(aptos = @0x1, admin = @break_aptos_pinata, user = @0xA)]
+    #[expected_failure(abort_code = E_NOT_AUTHORIZED, location = break_aptos_pinata::game)]
+    fun test_cancel_game_not_admin(aptos: &signer, admin: &signer, user: &signer) acquires GameManager {
+        setup_test(aptos, admin, user);
+
+        new(admin, GAME_TAPS, GAME_PRIZE);
+        cancel(user, 0);
+    }
+
+    #[test(aptos = @0x1, admin = @break_aptos_pinata, user = @0xA)]
+    #[expected_failure(abort_code = E_INVALID_TAPS, location = break_aptos_pinata::game)]
+    fun test_create_game_invalid_taps(aptos: &signer, admin: &signer, user: &signer) acquires GameManager {
+        setup_test(aptos, admin, user);
+
+        new(admin, 0, GAME_PRIZE);
+    }
+
+    #[test(aptos = @0x1, admin = @break_aptos_pinata, user = @0xA)]
+    #[expected_failure(abort_code = E_INVALID_PRIZE_BALANCE, location = break_aptos_pinata::game)]
+    fun test_create_game_invalid_prize_balance(aptos: &signer, admin: &signer, user: &signer) acquires GameManager {
+        setup_test(aptos, admin, user);
+
+        new(admin, GAME_TAPS, 0);
+    }
+
+    #[test(aptos = @0x1, admin = @break_aptos_pinata, user = @0xA)]
+    #[expected_failure(abort_code = E_INVALID_GAME_ID, location = break_aptos_pinata::game)]
+    fun test_cancel_invalid_game(aptos: &signer, admin: &signer, user: &signer) acquires GameManager {
+        setup_test(aptos, admin, user);
+
+        cancel(admin, 0);
+    }
+
+    #[test(aptos = @0x1, admin = @break_aptos_pinata, user = @0xA)]
+    #[expected_failure(abort_code = E_GAME_INACTIVE, location = break_aptos_pinata::game)]
+    fun test_cancel_inactive_game(aptos: &signer, admin: &signer, user: &signer) acquires GameManager {
+        setup_test(aptos, admin, user);
+
+        new(admin, GAME_TAPS, GAME_PRIZE);
+        cancel(admin, 0);
+        cancel(admin, 0);
+    }
+
+    #[test(aptos = @0x1, admin = @break_aptos_pinata, user = @0xA)]
+    #[expected_failure(abort_code = E_INVALID_GAME_ID, location = break_aptos_pinata::game)]
+    fun test_get_user_taps_invalid_game(aptos: &signer, admin: &signer, user: &signer) acquires GameManager {
+        setup_test(aptos, admin, user);
+
+        get_address_taps(0, address_of(user));
     }
 }
