@@ -1,4 +1,4 @@
-# USAGE: ./prettier.sh <path-to-move-file>
+# USAGE: ./prettier.sh <path-to-move-file-or-directory>
 
 PATH_TO_MOVE_FILE=$1
 
