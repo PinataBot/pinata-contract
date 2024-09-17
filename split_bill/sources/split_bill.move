@@ -51,6 +51,7 @@ module split_bill::bill {
         amount: u64,
         paid: bool,
 
+        note: Option<String>,
         paid_by: Option<address>,
         paid_at_timestamp_ms: Option<u64>,
     }
@@ -102,6 +103,7 @@ module split_bill::bill {
                 amount: amounts[index], 
                 name: names[index].to_string(), 
                 paid: false, 
+                note: option::none(),
                 paid_by: option::none(),
                 paid_at_timestamp_ms: option::none()
             })
@@ -146,17 +148,18 @@ module split_bill::bill {
 
     entry public fun pay<T>(
         bill: &mut Bill<T>,
+        note: vector<u8>,
         coin: Coin<T>,
         clock: &Clock,
         ctx: &mut TxContext
     ) {
-        let sender = ctx.sender();
-        pay_impl(bill, sender, coin, clock, sender);
+        pay_impl(bill, ctx.sender(), note, coin, clock, ctx);
     }
 
     entry public fun pay_for<T>(
         bill: &mut Bill<T>,
         mut addresses: vector<address>,
+        mut notes: vector<vector<u8>>,
         mut coins: vector<Coin<T>>,
         clock: &Clock,
         ctx: &mut TxContext
@@ -164,11 +167,13 @@ module split_bill::bill {
         let pay_for_members_length = addresses.length();
         assert!(pay_for_members_length >= 1);
         assert_vector_length(&coins, pay_for_members_length);
+        assert_vector_length(&notes, pay_for_members_length);
 
         addresses.reverse();
         addresses.do!(|address| {
             let coin = coins.pop_back();
-            pay_impl(bill, address, coin, clock, ctx.sender());
+            let note = notes.pop_back();
+            pay_impl(bill, address, note, coin, clock, ctx);
         });
 
         coins.destroy_empty();
@@ -178,10 +183,13 @@ module split_bill::bill {
     fun pay_impl<T>(
         bill: &mut Bill<T>,
         address: address,
+        note: vector<u8>,
         coin: Coin<T>,
         clock: &Clock,
-        payer: address,
+        ctx: &TxContext
     ) {
+        let payer = ctx.sender();
+        
         bill.assert_bill_not_paid();
         bill.assert_member(payer);
         bill.assert_member(address);
@@ -191,6 +199,7 @@ module split_bill::bill {
         member.assert_payment(&coin);
 
         member.paid = true;
+        member.note = option::some(note.to_string());
         member.paid_by = option::some(payer);
         member.paid_at_timestamp_ms = option::some(clock.timestamp_ms());
 
@@ -298,8 +307,9 @@ module split_bill::bill {
         // std::debug::print(&bill);
 
         ts::next_tx(&mut ts, BOB);
+        let note = b"Bob paid";
         let coin = coin::mint_for_testing<SUI>(BOB_AMOUNT, ts.ctx());
-        pay(&mut bill, coin, &clock, ts.ctx());
+        pay(&mut bill, note, coin, &clock, ts.ctx());
         // std::debug::print(&bill);
 
         // std::debug::print(&bill.members[&BOB]);
@@ -321,12 +331,16 @@ module split_bill::bill {
         ts::next_tx(&mut ts, ALICE);
         let mut bill = ts::take_shared<Bill<SUI>>(&ts);
         
+        let alice_note = b"Alice paid";
+        let bob_note = b"Bob paid";
+        let charlie_note = b"Charlie paid";
+        
         ts::next_tx(&mut ts, BOB);
         let coin_a = coin::mint_for_testing<SUI>(ALICE_AMOUNT, ts.ctx());
         let coin_b = coin::mint_for_testing<SUI>(BOB_AMOUNT, ts.ctx());
         let coin_c = coin::mint_for_testing<SUI>(CHARLIE_AMOUNT, ts.ctx());
 
-        pay_for(&mut bill, vector[ALICE, BOB, CHARLIE], vector[coin_a, coin_b, coin_c], &clock, ts.ctx());
+        pay_for(&mut bill, vector[ALICE, BOB, CHARLIE], vector[alice_note, bob_note, charlie_note], vector[coin_a, coin_b, coin_c], &clock, ts.ctx());
         // std::debug::print(&bill);
 
         assert!(bill.paid);
