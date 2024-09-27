@@ -12,3 +12,6 @@ split_bill/Move.lock
 split_bill/build
 break_aptos_pinata/.aptos
 break_aptos_pinata/build
+double_or_nothing/.idea
+double_or_nothing/Move.lock
+double_or_nothing/build
