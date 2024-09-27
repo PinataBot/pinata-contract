@@ -1,13 +1,19 @@
 /// Module: double_or_nothing
 module double_or_nothing::game {
     use sui::random::{Self, Random, RandomGenerator};
-    use sui::balance::{ Self, Balance};
-    use sui::coin::{Self, Coin};
+    use sui::balance::{Self, Balance};
+    use sui::coin::{Coin};
     use sui::pay::{keep};
     use sui::package::{Self, Publisher};
-    use sui::table::{Self, Table};
     use sui::event::{emit};
-    use double_or_nothing::pay_utils::{balance_withdraw_all, balance_top_up, balance_withdraw_all_to_coin, balance_withdraw, coin_split_percent_to_coin, balance_split_percent_to_coin};
+    use double_or_nothing::pay_utils::{
+        balance_withdraw_all,
+        balance_top_up,
+        balance_withdraw_all_to_coin,
+        balance_withdraw,
+        coin_split_percent_to_coin,
+        balance_split_percent_to_coin
+    };
     use double_or_nothing::random_utils::{weighted_random_choice};
 
 
@@ -262,7 +268,7 @@ module double_or_nothing::game {
 
         game.update_stats(win, bet_value, fee_value);
 
-        if(game.is_bonus_play()){
+        if (game.is_bonus_play()) {
             game.bonus_play(&mut rg, ctx)
         };
 
@@ -289,7 +295,7 @@ module double_or_nothing::game {
         game.total_volume = game.total_volume + (bet_value as u128);
         game.total_fees = game.total_fees + (fee_value as u128);
     }
-    
+
     fun update_bonus_stats<T>(game: &mut Game<T>, bonus_value: u64) {
         game.total_bonus_plays = game.total_bonus_plays + 1;
         if (bonus_value > 0) game.total_bonus_wins = game.total_bonus_wins + 1 else game.total_bonus_losses = game.total_bonus_losses + 1;
@@ -302,7 +308,7 @@ module double_or_nothing::game {
 
     fun bonus_play<T>(game: &mut Game<T>, rg: &mut RandomGenerator, ctx: &mut TxContext) {
         let bonus_percent = weighted_random_choice(game.bonus_weights, game.bonus_values, rg);
-        
+
         let bonus_coin = balance_split_percent_to_coin(&mut game.fees, bonus_percent, ctx);
 
         update_bonus_stats(game, bonus_coin.value());
@@ -322,6 +328,7 @@ module double_or_nothing::game {
     #[test_only] use std::debug::print;
     #[test_only] use sui::test_scenario as ts;
     #[test_only] use sui::sui::SUI;
+    #[test_only] use sui::coin::{Self};
 
     #[test_only] const ONE_SUI: u64 = 1_000_000_000;
     #[test_only] const ADMIN: address = @0xA;

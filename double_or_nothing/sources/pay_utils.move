@@ -15,7 +15,11 @@ module double_or_nothing::pay_utils {
         keep(coin::take(balance, value, ctx), ctx);
     }
 
-    public(package) fun balance_split_percent_to_coin<T>(balance: &mut Balance<T>, percent: u64, ctx: &mut TxContext): Coin<T> {
+    public(package) fun balance_split_percent_to_coin<T>(
+        balance: &mut Balance<T>,
+        percent: u64,
+        ctx: &mut TxContext
+    ): Coin<T> {
         let percent_value = balance.value() * percent / 100;
 
         coin::take(balance, percent_value, ctx)
