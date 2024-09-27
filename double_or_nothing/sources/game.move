@@ -1,4 +1,3 @@
-/// Module: double_or_nothing
 module double_or_nothing::game {
     use sui::random::{Self, Random, RandomGenerator};
     use sui::balance::{Self, Balance};
