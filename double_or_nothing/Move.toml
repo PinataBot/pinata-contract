@@ -1,6 +1,6 @@
 [package]
 name = "double_or_nothing"
-edition = "2024.beta" # edition = "legacy" to use legacy (pre-2024) Move
+edition = "2024.beta"      # edition = "legacy" to use legacy (pre-2024) Move
 # license = ""           # e.g., "MIT", "GPL", "Apache 2.0"
 # authors = ["..."]      # e.g., ["Joe Smith (joesmith@noemail.com)", "John Snow (johnsnow@noemail.com)"]
 
@@ -19,7 +19,9 @@ Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-fram
 # Override = { local = "../conflicting/version", override = true }
 
 [addresses]
-double_or_nothing = "0x0"
+publisher = "0x11cecd8b77c087ddeba72599ecc23f7629d2b4b64dea70f77a0377e759758a23"
+double_or_nothing = "0xacb32e9d13c584e017f7a27e98ca4c7323082a0d4423583a06e8766906fa6dfb"
+game_aaa = "0xa3685b437bf8c0b0160fdaa4d19d23414f840e45261724ba85a3193062efa73f"
 
 # Named addresses will be accessible in Move as `@name`. They're also exported:
 # for example, `std = "0x1"` is exported by the Standard Library.
@@ -34,4 +36,3 @@ double_or_nothing = "0x0"
 # The dev-addresses section allows overwriting named addresses for the `--test`
 # and `--dev` modes.
 # alice = "0xB0B"
-
