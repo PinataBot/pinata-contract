@@ -86,7 +86,9 @@ module double_or_nothing::game {
     public struct BonusPlayed has copy, drop {
         game: ID,
         player: address,
-        bonus: u64,
+        win: bool,
+        prize_percent: u64,
+        prize: u64,
     }
 
     // ========================= INITIALIZATION =========================
@@ -309,15 +311,19 @@ module double_or_nothing::game {
         let bonus_percent = weighted_random_choice(game.bonus_weights, game.bonus_values, rg);
 
         let bonus_coin = balance_split_percent_to_coin(&mut game.fees, bonus_percent, ctx);
+        let bonus_coin_value = bonus_coin.value();
+        let win = bonus_coin_value > 0;
 
-        update_bonus_stats(game, bonus_coin.value());
+        update_bonus_stats(game, bonus_coin_value);
 
         keep(bonus_coin, ctx);
 
         emit(BonusPlayed {
             game: object::id(game),
             player: ctx.sender(),
-            bonus: bonus_percent,
+            win,
+            prize: bonus_coin_value,
+            prize_percent: bonus_percent,
         });
     }
 
