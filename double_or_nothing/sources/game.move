@@ -28,6 +28,7 @@ module double_or_nothing::game {
     const INITIAL_BONUS_FREQUENCY: u64 = 25;
     const INITIAL_BONUS_WEIGHTS: vector<u64> = vector[60, 25, 10, 5];
     const INITIAL_BONUS_VALUES: vector<u64> = vector[0, 2, 5, 10];
+    const INITIAL_LAST_PLAYED_SIZE: u64 = 10;
 
     /// 10%
     const MAX_FEE_PERCENTAGE: u64 = 10;
@@ -57,6 +58,8 @@ module double_or_nothing::game {
         fees: Balance<T>,
 
         // Stats
+        last_played: vector<Played>,
+        
         total_plays: u64,
         total_wins: u64,
         total_losses: u64,
@@ -75,7 +78,7 @@ module double_or_nothing::game {
         game: ID,
     }
 
-    public struct Played has copy, drop {
+    public struct Played has copy, drop, store {
         game: ID,
         player: address,
         win: bool,
@@ -119,6 +122,7 @@ module double_or_nothing::game {
             bonus_values: INITIAL_BONUS_VALUES,
             pool: balance::zero(),
             fees: balance::zero(),
+            last_played: vector[],
             total_plays: 0,
             total_wins: 0,
             total_losses: 0,
@@ -269,17 +273,21 @@ module double_or_nothing::game {
 
         game.update_stats(win, bet_value, fee_value);
 
-        if (game.is_bonus_play()) {
-            game.bonus_play(&mut rg, ctx)
-        };
-
-        emit(Played {
+        let played = Played {
             game: object::id(game),
             player: ctx.sender(),
             win: win,
             bet: bet_value,
             prize: prize_value,
-        });
+        };
+
+        game.update_last_played(played);
+
+        emit(played);
+
+        if (game.is_bonus_play()) {
+            game.bonus_play(&mut rg, ctx)
+        };
     }
 
     // ========================= PUBLIC VIEW FUNCTIONS =========================
@@ -327,8 +335,18 @@ module double_or_nothing::game {
         });
     }
 
-    // ========================= TESTS =========================
+    fun update_last_played<T>(game: &mut Game<T>, played: Played) {
+        let last_played =&mut game.last_played;
+        if (last_played.length() >= INITIAL_LAST_PLAYED_SIZE) {
+            // remove the oldest play
+            last_played.reverse();
+            last_played.pop_back();
+            last_played.reverse();
+        };
+        last_played.push_back(played);
+    }
 
+    // ========================= TESTS =========================
 
     #[test_only] use std::debug::print;
     #[test_only] use sui::test_scenario as ts;
@@ -389,6 +407,36 @@ module double_or_nothing::game {
 
         print(&game);
         ts::return_shared(r);
+        ts::return_shared(game);
+        ts::end(ts);
+    }
+
+    #[test]
+    fun test_last_played_vector(){
+        let mut ts = ts::begin(ADMIN);
+        test_init(&mut ts);
+
+        ts.next_tx(ADMIN);
+        test_new(&mut ts);
+
+        ts.next_tx(ADMIN);
+        let mut game = ts.take_shared<Game<SUI>>();
+        let game_id = object::id(&game);
+        print(&game);
+
+        // let r = ts.take_shared<Random>();
+
+        20u8.do!(|i| {
+            update_last_played(&mut game, Played {
+                game: game_id,
+                player: PLAYER,
+                win: true,
+                bet: 100,
+                prize: i as u64,
+            });
+        });
+
+        print(&game);
         ts::return_shared(game);
         ts::end(ts);
     }
