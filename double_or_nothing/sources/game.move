@@ -405,6 +405,8 @@ module double_or_nothing::game {
             play(&mut game, &r, bet, ts.ctx());
         });
 
+        assert!(game.total_plays == 500);
+
         print(&game);
         ts::return_shared(r);
         ts::return_shared(game);
@@ -435,6 +437,8 @@ module double_or_nothing::game {
                 prize: i as u64,
             });
         });
+
+        assert!(game.last_played.length() == INITIAL_LAST_PLAYED_SIZE);
 
         print(&game);
         ts::return_shared(game);
