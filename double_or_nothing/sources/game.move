@@ -46,6 +46,11 @@ module double_or_nothing::game {
 
     public struct GAME has drop {}
 
+    public struct GameAdmin has key, store {
+        id: UID,
+        game: ID,
+    }
+
     public struct Game<phantom T> has key {
         id: UID,
         min_bet_value: u64,
@@ -104,13 +109,13 @@ module double_or_nothing::game {
 
     // ========================= PUBLIC MUTABLE FUNCTIONS =========================
 
-    // ========================= ADMIN FUNCTIONS
+    // ========================= PUBLISHER FUNCTIONS
 
     entry fun new<T>(
         cap: &Publisher,
         ctx: &mut TxContext,
     ) {
-        assert_admin(cap);
+        assert_publisher(cap);
 
         let game = Game<T> {
             id: object::new(ctx),
@@ -138,17 +143,24 @@ module double_or_nothing::game {
 
         transfer::share_object(game);
 
+        transfer::transfer(GameAdmin {
+            id: object::new(ctx),
+            game: id,
+        }, ctx.sender());
+
         emit(Created {
             game: id,
         })
     }
 
+    // ========================= ADMIN FUNCTIONS
+
     entry fun set_min_bet_value<T>(
-        cap: &Publisher,
+        cap: &GameAdmin,
         game: &mut Game<T>,
         value: u64,
     ) {
-        assert_admin(cap);
+        game.assert_admin(cap);
 
         assert!(value < game.max_bet_value, EInvalidBetValue);
 
@@ -156,11 +168,11 @@ module double_or_nothing::game {
     }
 
     entry fun set_max_bet_value<T>(
-        cap: &Publisher,
+        cap: &GameAdmin,
         game: &mut Game<T>,
         value: u64,
     ) {
-        assert_admin(cap);
+        game.assert_admin(cap);
 
         assert!(value > game.min_bet_value, EInvalidBetValue);
 
@@ -168,11 +180,11 @@ module double_or_nothing::game {
     }
 
     entry fun set_fee_percentage<T>(
-        cap: &Publisher,
+        cap: &GameAdmin,
         game: &mut Game<T>,
         percentage: u64,
     ) {
-        assert_admin(cap);
+        game.assert_admin(cap);
 
         assert!(percentage <= MAX_FEE_PERCENTAGE, EInvalidFeePercentage);
 
@@ -180,22 +192,22 @@ module double_or_nothing::game {
     }
 
     entry fun set_bonus_frequency<T>(
-        cap: &Publisher,
+        cap: &GameAdmin,
         game: &mut Game<T>,
         frequency: u64,
     ) {
-        assert_admin(cap);
+        game.assert_admin(cap);
 
         game.bonus_frequency = frequency;
     }
 
     entry fun set_bonus_weights_and_values<T>(
-        cap: &Publisher,
+        cap: &GameAdmin,
         game: &mut Game<T>,
         weights: vector<u64>,
         values: vector<u64>,
     ) {
-        assert_admin(cap);
+        game.assert_admin(cap);
 
         assert!(weights.length() == values.length(), EInvalidVectorLength);
 
@@ -204,31 +216,31 @@ module double_or_nothing::game {
     }
 
     entry fun withdraw_pool<T>(
-        cap: &Publisher,
+        cap: &GameAdmin,
         game: &mut Game<T>,
         ctx: &mut TxContext,
     ) {
-        assert_admin(cap);
+        game.assert_admin(cap);
 
         balance_withdraw_all(&mut game.pool, ctx)
     }
 
     entry fun withdraw_fees<T>(
-        cap: &Publisher,
+        cap: &GameAdmin,
         game: &mut Game<T>,
         ctx: &mut TxContext,
     ) {
-        assert_admin(cap);
+        game.assert_admin(cap);
 
         balance_withdraw_all(&mut game.fees, ctx)
     }
 
     entry fun burn_fees<T>(
-        cap: &Publisher,
+        cap: &GameAdmin,
         game: &mut Game<T>,
         ctx: &mut TxContext,
     ) {
-        assert_admin(cap);
+        game.assert_admin(cap);
 
         let fees = balance_withdraw_all_to_coin(&mut game.fees, ctx);
 
@@ -294,8 +306,12 @@ module double_or_nothing::game {
 
     // ========================= PRIVATE FUNCTIONS =========================
 
-    fun assert_admin(cap: &Publisher) {
+    fun assert_publisher(cap: &Publisher) {
         assert!(cap.from_module<GAME>(), ENotAuthorized);
+    }
+
+    fun assert_admin<T>(game: &Game<T>, cap: &GameAdmin) {
+        assert!(object::id(game) == cap.game, ENotAuthorized);
     }
 
     fun update_stats<T>(game: &mut Game<T>, win: bool, bet_value: u64, fee_value: u64) {
