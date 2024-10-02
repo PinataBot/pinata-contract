@@ -91,14 +91,12 @@ module double_or_nothing::game {
         win: bool,
         bet: u64,
         prize: u64,
-    }
 
-    public struct BonusPlayed has copy, drop {
-        game: ID,
-        player: address,
-        win: bool,
-        prize_percent: u64,
-        prize: u64,
+        // bonus
+        is_bonus_play: bool,
+        bonus_win: bool,
+        bonus_percent: u64,
+        bonus_prize: u64,
     }
 
     // ========================= INITIALIZATION =========================
@@ -287,23 +285,25 @@ module double_or_nothing::game {
             balance_withdraw(&mut game.pool, prize_value, ctx)
         };
 
-        game.update_stats(win, bet_value, fee_value);
+        let (is_bonus_play, bonus_percent, bonus_coin_value)= game.bonus_play(&mut rg, ctx);
+
+        game.update_stats(win, bet_value, fee_value, is_bonus_play, bonus_coin_value);
 
         let played = Played {
             game: object::id(game),
             player: ctx.sender(),
-            win: win,
+            win,
             bet: bet_value,
             prize: prize_value,
+            is_bonus_play,
+            bonus_win: bonus_coin_value > 0,
+            bonus_percent: bonus_percent,
+            bonus_prize: bonus_coin_value,
         };
 
         game.update_last_played(played);
 
         emit(played);
-
-        if (game.is_bonus_play()) {
-            game.bonus_play(&mut rg, ctx)
-        };
     }
 
     // ========================= PUBLIC VIEW FUNCTIONS =========================
@@ -318,43 +318,46 @@ module double_or_nothing::game {
         assert!(object::id(game) == cap.game, ENotAuthorized);
     }
 
-    fun update_stats<T>(game: &mut Game<T>, win: bool, bet_value: u64, fee_value: u64) {
+    fun update_stats<T>(
+        game: &mut Game<T>, 
+        win: bool, 
+        bet_value: u64, 
+        fee_value: u64,
+        is_bonus_play: bool,
+        bonus_coin_value: u64
+    ) {
         let stats = &mut game.stats;
         stats.total_plays = stats.total_plays + 1;
         if (win) stats.total_wins = stats.total_wins + 1 else stats.total_losses = stats.total_losses + 1;
         stats.total_volume = stats.total_volume + (bet_value as u128);
         stats.total_fees = stats.total_fees + (fee_value as u128);
-    }
 
-    fun update_bonus_stats<T>(game: &mut Game<T>, bonus_value: u64) {
-        let stats = &mut game.stats;
-        stats.total_bonus_plays = stats.total_bonus_plays + 1;
-        if (bonus_value > 0) stats.total_bonus_wins = stats.total_bonus_wins + 1 else stats.total_bonus_losses = stats.total_bonus_losses + 1;
-        stats.total_bonus_volume = stats.total_bonus_volume + (bonus_value as u128);
+        if (is_bonus_play) {
+            stats.total_bonus_plays = stats.total_bonus_plays + 1;
+            if (bonus_coin_value > 0) stats.total_bonus_wins = stats.total_bonus_wins + 1 else stats.total_bonus_losses = stats.total_bonus_losses + 1;
+            stats.total_bonus_volume = stats.total_bonus_volume + (bonus_coin_value as u128);
+        }
     }
 
     fun is_bonus_play<T>(game: &Game<T>): bool {
         game.stats.total_plays % game.bonus_frequency == 0
     }
 
-    fun bonus_play<T>(game: &mut Game<T>, rg: &mut RandomGenerator, ctx: &mut TxContext) {
+    fun bonus_play<T>(game: &mut Game<T>, rg: &mut RandomGenerator, ctx: &mut TxContext): (bool, u64, u64) {
+        let is_bonus_play = is_bonus_play(game);
+        
+        if (!is_bonus_play) {
+            return (is_bonus_play, 0, 0)
+        };
+        
         let bonus_percent = weighted_random_choice(game.bonus_weights, game.bonus_values, rg);
 
         let bonus_coin = balance_split_percent_to_coin(&mut game.fees, bonus_percent, ctx);
         let bonus_coin_value = bonus_coin.value();
-        let win = bonus_coin_value > 0;
-
-        update_bonus_stats(game, bonus_coin_value);
 
         keep(bonus_coin, ctx);
 
-        emit(BonusPlayed {
-            game: object::id(game),
-            player: ctx.sender(),
-            win,
-            prize: bonus_coin_value,
-            prize_percent: bonus_percent,
-        });
+        (is_bonus_play, bonus_percent, bonus_coin_value)
     }
 
     fun update_last_played<T>(game: &mut Game<T>, played: Played) {
@@ -421,13 +424,15 @@ module double_or_nothing::game {
 
         let r = ts.take_shared<Random>();
 
-        500u16.do!(|_| {
+        let plays_count = 500u16;
+        plays_count.do!(|_| {
             ts.next_tx(PLAYER);
             let bet = coin::mint_for_testing<SUI>(ONE_SUI, ts.ctx());
             play(&mut game, &r, bet, ts.ctx());
         });
 
-        assert!(game.stats.total_plays == 500);
+        assert!(game.stats.total_plays == plays_count as u64);
+        assert!(game.stats.total_bonus_plays == plays_count as u64 / game.bonus_frequency);
 
         print(&game);
         ts::return_shared(r);
@@ -457,6 +462,10 @@ module double_or_nothing::game {
                 win: true,
                 bet: 100,
                 prize: i as u64,
+                is_bonus_play: false,
+                bonus_win: false,
+                bonus_percent: 0,
+                bonus_prize: 0,
             });
         });
 
