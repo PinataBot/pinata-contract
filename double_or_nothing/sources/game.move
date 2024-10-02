@@ -5,6 +5,7 @@ module double_or_nothing::game {
     use sui::pay::{keep};
     use sui::package::{Self, Publisher};
     use sui::event::{emit};
+    use sui::table::{Self, Table};
     use double_or_nothing::pay_utils::{
         balance_withdraw_all,
         balance_top_up,
@@ -51,7 +52,7 @@ module double_or_nothing::game {
         game: ID,
     }
 
-    public struct Stats has store {
+    public struct Stats has copy, drop, store {
         total_plays: u64,
         total_wins: u64,
         total_losses: u64,
@@ -77,6 +78,7 @@ module double_or_nothing::game {
 
         last_played: vector<Played>,
         stats: Stats,
+        stats_per_address: Table<address, Stats>,
     }
 
     // ========================= EVENTS =========================
@@ -128,17 +130,8 @@ module double_or_nothing::game {
             pool: balance::zero(),
             fees: balance::zero(),
             last_played: vector[],
-            stats: Stats {
-                total_plays: 0,
-                total_wins: 0,
-                total_losses: 0,
-                total_volume: 0,
-                total_fees: 0,
-                total_bonus_plays: 0,
-                total_bonus_wins: 0,
-                total_bonus_losses: 0,
-                total_bonus_volume: 0
-            },
+            stats: new_stats(),
+            stats_per_address: table::new(ctx),
         };
 
         let id = object::id(&game);
@@ -287,7 +280,8 @@ module double_or_nothing::game {
 
         let (is_bonus_play, bonus_percent, bonus_coin_value)= game.bonus_play(&mut rg, ctx);
 
-        game.update_stats(win, bet_value, fee_value, is_bonus_play, bonus_coin_value);
+        game.stats.update_stats(win, bet_value, fee_value, is_bonus_play, bonus_coin_value);
+        game.update_address_stats(ctx.sender(), win, bet_value, fee_value, is_bonus_play, bonus_coin_value);
 
         let played = Played {
             game: object::id(game),
@@ -308,6 +302,13 @@ module double_or_nothing::game {
 
     // ========================= PUBLIC VIEW FUNCTIONS =========================
 
+    public fun get_address_stats<T>(
+        game: &Game<T>,
+        address: address,
+    ): Stats {
+        game.stats_per_address[address]
+    }
+
     // ========================= PRIVATE FUNCTIONS =========================
 
     fun assert_publisher(cap: &Publisher) {
@@ -318,15 +319,14 @@ module double_or_nothing::game {
         assert!(object::id(game) == cap.game, ENotAuthorized);
     }
 
-    fun update_stats<T>(
-        game: &mut Game<T>, 
+    fun update_stats(
+        stats: &mut Stats,
         win: bool, 
         bet_value: u64, 
         fee_value: u64,
         is_bonus_play: bool,
         bonus_coin_value: u64
     ) {
-        let stats = &mut game.stats;
         stats.total_plays = stats.total_plays + 1;
         if (win) stats.total_wins = stats.total_wins + 1 else stats.total_losses = stats.total_losses + 1;
         stats.total_volume = stats.total_volume + (bet_value as u128);
@@ -337,6 +337,23 @@ module double_or_nothing::game {
             if (bonus_coin_value > 0) stats.total_bonus_wins = stats.total_bonus_wins + 1 else stats.total_bonus_losses = stats.total_bonus_losses + 1;
             stats.total_bonus_volume = stats.total_bonus_volume + (bonus_coin_value as u128);
         }
+    }
+
+    fun update_address_stats<T>(
+        game: &mut Game<T>,
+        address: address,
+        win: bool, 
+        bet_value: u64, 
+        fee_value: u64,
+        is_bonus_play: bool,
+        bonus_coin_value: u64
+    ) {
+        let stats_per_address =  &mut game.stats_per_address;
+        if (!stats_per_address.contains(address)) {
+            stats_per_address.add(address, new_stats());
+        };
+
+        stats_per_address[address].update_stats(win, bet_value, fee_value, is_bonus_play, bonus_coin_value);
     }
 
     fun is_bonus_play<T>(game: &Game<T>): bool {
@@ -369,6 +386,20 @@ module double_or_nothing::game {
             last_played.reverse();
         };
         last_played.push_back(played);
+    }
+
+    fun new_stats(): Stats {
+        Stats {
+            total_plays: 0,
+            total_wins: 0,
+            total_losses: 0,
+            total_volume: 0,
+            total_fees: 0,
+            total_bonus_plays: 0,
+            total_bonus_wins: 0,
+            total_bonus_losses: 0,
+            total_bonus_volume: 0
+        }
     }
 
     // ========================= TESTS =========================
@@ -433,6 +464,9 @@ module double_or_nothing::game {
 
         assert!(game.stats.total_plays == plays_count as u64);
         assert!(game.stats.total_bonus_plays == plays_count as u64 / game.bonus_frequency);
+    
+        assert!(game.get_address_stats(PLAYER).total_plays == plays_count as u64);
+        assert!(game.get_address_stats(PLAYER).total_bonus_plays == plays_count as u64 / game.bonus_frequency);
 
         print(&game);
         ts::return_shared(r);
