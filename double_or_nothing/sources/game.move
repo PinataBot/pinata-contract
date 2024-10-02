@@ -51,6 +51,19 @@ module double_or_nothing::game {
         game: ID,
     }
 
+    public struct Stats has store {
+        total_plays: u64,
+        total_wins: u64,
+        total_losses: u64,
+        total_volume: u128,
+        total_fees: u128,
+
+        total_bonus_plays: u64,
+        total_bonus_wins: u64,
+        total_bonus_losses: u64,
+        total_bonus_volume: u128,
+    }
+
     public struct Game<phantom T> has key {
         id: UID,
         min_bet_value: u64,
@@ -62,19 +75,8 @@ module double_or_nothing::game {
         pool: Balance<T>,
         fees: Balance<T>,
 
-        // Stats
         last_played: vector<Played>,
-        
-        total_plays: u64,
-        total_wins: u64,
-        total_losses: u64,
-        total_volume: u128,
-        total_fees: u128,
-
-        total_bonus_plays: u64,
-        total_bonus_wins: u64,
-        total_bonus_losses: u64,
-        total_bonus_volume: u128,
+        stats: Stats,
     }
 
     // ========================= EVENTS =========================
@@ -128,15 +130,17 @@ module double_or_nothing::game {
             pool: balance::zero(),
             fees: balance::zero(),
             last_played: vector[],
-            total_plays: 0,
-            total_wins: 0,
-            total_losses: 0,
-            total_volume: 0,
-            total_fees: 0,
-            total_bonus_plays: 0,
-            total_bonus_wins: 0,
-            total_bonus_losses: 0,
-            total_bonus_volume: 0,
+            stats: Stats {
+                total_plays: 0,
+                total_wins: 0,
+                total_losses: 0,
+                total_volume: 0,
+                total_fees: 0,
+                total_bonus_plays: 0,
+                total_bonus_wins: 0,
+                total_bonus_losses: 0,
+                total_bonus_volume: 0
+            },
         };
 
         let id = object::id(&game);
@@ -315,20 +319,22 @@ module double_or_nothing::game {
     }
 
     fun update_stats<T>(game: &mut Game<T>, win: bool, bet_value: u64, fee_value: u64) {
-        game.total_plays = game.total_plays + 1;
-        if (win) game.total_wins = game.total_wins + 1 else game.total_losses = game.total_losses + 1;
-        game.total_volume = game.total_volume + (bet_value as u128);
-        game.total_fees = game.total_fees + (fee_value as u128);
+        let stats = &mut game.stats;
+        stats.total_plays = stats.total_plays + 1;
+        if (win) stats.total_wins = stats.total_wins + 1 else stats.total_losses = stats.total_losses + 1;
+        stats.total_volume = stats.total_volume + (bet_value as u128);
+        stats.total_fees = stats.total_fees + (fee_value as u128);
     }
 
     fun update_bonus_stats<T>(game: &mut Game<T>, bonus_value: u64) {
-        game.total_bonus_plays = game.total_bonus_plays + 1;
-        if (bonus_value > 0) game.total_bonus_wins = game.total_bonus_wins + 1 else game.total_bonus_losses = game.total_bonus_losses + 1;
-        game.total_bonus_volume = game.total_bonus_volume + (bonus_value as u128);
+        let stats = &mut game.stats;
+        stats.total_bonus_plays = stats.total_bonus_plays + 1;
+        if (bonus_value > 0) stats.total_bonus_wins = stats.total_bonus_wins + 1 else stats.total_bonus_losses = stats.total_bonus_losses + 1;
+        stats.total_bonus_volume = stats.total_bonus_volume + (bonus_value as u128);
     }
 
     fun is_bonus_play<T>(game: &Game<T>): bool {
-        game.total_plays % game.bonus_frequency == 0
+        game.stats.total_plays % game.bonus_frequency == 0
     }
 
     fun bonus_play<T>(game: &mut Game<T>, rg: &mut RandomGenerator, ctx: &mut TxContext) {
@@ -421,7 +427,7 @@ module double_or_nothing::game {
             play(&mut game, &r, bet, ts.ctx());
         });
 
-        assert!(game.total_plays == 500);
+        assert!(game.stats.total_plays == 500);
 
         print(&game);
         ts::return_shared(r);
