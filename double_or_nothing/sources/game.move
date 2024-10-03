@@ -10,7 +10,6 @@ module double_or_nothing::game {
     use double_or_nothing::pay_utils::{
         balance_withdraw_all,
         balance_top_up,
-        balance_withdraw_all_to_coin,
         balance_withdraw,
         coin_split_percent_to_coin,
         balance_withdraw_to_coin
@@ -75,8 +74,7 @@ module double_or_nothing::game {
         bonus_weights: vector<u64>,
         bonus_values: vector<u64>,
         pool: Balance<T>,
-        // todo: rename to prize_pool
-        fees: Balance<T>,
+        prize_pool: Balance<T>,
 
         last_plays: vector<Play>,
         stats: Stats,
@@ -130,7 +128,7 @@ module double_or_nothing::game {
             bonus_weights: INITIAL_BONUS_WEIGHTS,
             bonus_values: INITIAL_BONUS_VALUES,
             pool: balance::zero(),
-            fees: balance::zero(),
+            prize_pool: balance::zero(),
             last_plays: vector[],
             stats: new_stats(),
             stats_per_address: table::new(ctx),
@@ -223,26 +221,14 @@ module double_or_nothing::game {
         balance_withdraw_all(&mut game.pool, ctx)
     }
 
-    entry fun withdraw_fees<T>(
+    entry fun withdraw_prize_pool<T>(
         cap: &GameAdmin,
         game: &mut Game<T>,
         ctx: &mut TxContext,
     ) {
         game.assert_admin(cap);
 
-        balance_withdraw_all(&mut game.fees, ctx)
-    }
-
-    entry fun burn_fees<T>(
-        cap: &GameAdmin,
-        game: &mut Game<T>,
-        ctx: &mut TxContext,
-    ) {
-        game.assert_admin(cap);
-
-        let fees = balance_withdraw_all_to_coin(&mut game.fees, ctx);
-
-        transfer::public_transfer(fees, NULL_ADDRESS);
+        balance_withdraw_all(&mut game.prize_pool, ctx)
     }
 
     entry fun top_up_pool<T>(
@@ -267,7 +253,8 @@ module double_or_nothing::game {
         // after split, bet will decrease by fee value
         let fee = coin_split_percent_to_coin(&mut bet, game.fee_percentage, ctx);
         let fee_value = fee.value();
-        balance_top_up(&mut game.fees, fee);
+        // todo: burn 50% of fee
+        balance_top_up(&mut game.prize_pool, fee);
 
         assert!(game.pool.value() >= bet.value(), EGameBalanceInsufficient);
         let bet_value = bet.value();
@@ -427,7 +414,7 @@ module double_or_nothing::game {
         //todo 0.1% to win all fees
         let bonus_value = weighted_random_choice(game.bonus_weights, game.bonus_values, rg);
 
-        let bonus_coin = balance_withdraw_to_coin(&mut game.fees, bonus_value, ctx);
+        let bonus_coin = balance_withdraw_to_coin(&mut game.prize_pool, bonus_value, ctx);
 
         keep(bonus_coin, ctx);
 
