@@ -13,7 +13,7 @@ module double_or_nothing::game {
         balance_withdraw_all_to_coin,
         balance_withdraw,
         coin_split_percent_to_coin,
-        balance_split_percent_to_coin
+        balance_withdraw_to_coin
     };
     use double_or_nothing::random_utils::{weighted_random_choice};
 
@@ -28,8 +28,8 @@ module double_or_nothing::game {
     /// 2%
     const INITIAL_FEE_PERCENTAGE: u64 = 2;
     const INITIAL_BONUS_FREQUENCY: u64 = 25;
-    const INITIAL_BONUS_WEIGHTS: vector<u64> = vector[60, 25, 10, 5];
-    const INITIAL_BONUS_VALUES: vector<u64> = vector[0, 2, 5, 10];
+    const INITIAL_BONUS_WEIGHTS: vector<u64> = vector[0, 25, 25, 10, 10, 10];
+    const INITIAL_BONUS_VALUES: vector<u64> = vector[0, 200, 600, 1000, 2000, 5000];
     const INITIAL_LAST_PLAYS_SIZE: u64 = 10;
 
     /// 10%
@@ -75,6 +75,7 @@ module double_or_nothing::game {
         bonus_weights: vector<u64>,
         bonus_values: vector<u64>,
         pool: Balance<T>,
+        // todo: rename to prize_pool
         fees: Balance<T>,
 
         last_plays: vector<Play>,
@@ -99,7 +100,6 @@ module double_or_nothing::game {
         // bonus
         is_bonus_play: bool,
         bonus_win: bool,
-        bonus_percent: u64,
         bonus_prize: u64,
     }
 
@@ -281,10 +281,10 @@ module double_or_nothing::game {
             balance_withdraw(&mut game.pool, prize_value, ctx)
         };
 
-        let (is_bonus_play, bonus_percent, bonus_coin_value)= game.bonus_play(&mut rg, ctx);
+        let (is_bonus_play, bonus_value)= game.bonus_play(&mut rg, ctx);
 
-        game.stats.update_stats(win, bet_value, fee_value, is_bonus_play, bonus_coin_value);
-        game.update_address_stats(ctx.sender(), win, bet_value, fee_value, is_bonus_play, bonus_coin_value);
+        game.stats.update_stats(win, bet_value, fee_value, is_bonus_play, bonus_value);
+        game.update_address_stats(ctx.sender(), win, bet_value, fee_value, is_bonus_play, bonus_value);
 
         let play = Play {
             game: object::id(game),
@@ -293,9 +293,8 @@ module double_or_nothing::game {
             bet: bet_value,
             prize: prize_value,
             is_bonus_play,
-            bonus_win: bonus_coin_value > 0,
-            bonus_percent: bonus_percent,
-            bonus_prize: bonus_coin_value,
+            bonus_win: bonus_value > 0,
+            bonus_prize: bonus_value,
         };
 
         game.update_last_plays(play);
@@ -381,7 +380,7 @@ module double_or_nothing::game {
         bet_value: u64, 
         fee_value: u64,
         is_bonus_play: bool,
-        bonus_coin_value: u64
+        bonus_value: u64
     ) {
         stats.total_plays = stats.total_plays + 1;
         if (win) stats.total_wins = stats.total_wins + 1 else stats.total_losses = stats.total_losses + 1;
@@ -390,8 +389,8 @@ module double_or_nothing::game {
 
         if (is_bonus_play) {
             stats.total_bonus_plays = stats.total_bonus_plays + 1;
-            if (bonus_coin_value > 0) stats.total_bonus_wins = stats.total_bonus_wins + 1 else stats.total_bonus_losses = stats.total_bonus_losses + 1;
-            stats.total_bonus_volume = stats.total_bonus_volume + (bonus_coin_value as u128);
+            if (bonus_value > 0) stats.total_bonus_wins = stats.total_bonus_wins + 1 else stats.total_bonus_losses = stats.total_bonus_losses + 1;
+            stats.total_bonus_volume = stats.total_bonus_volume + (bonus_value as u128);
         }
     }
 
@@ -402,14 +401,14 @@ module double_or_nothing::game {
         bet_value: u64, 
         fee_value: u64,
         is_bonus_play: bool,
-        bonus_coin_value: u64
+        bonus_value: u64
     ) {
         let stats_per_address =  &mut game.stats_per_address;
         if (!stats_per_address.contains(address)) {
             stats_per_address.add(address, new_stats());
         };
 
-        stats_per_address[address].update_stats(win, bet_value, fee_value, is_bonus_play, bonus_coin_value);
+        stats_per_address[address].update_stats(win, bet_value, fee_value, is_bonus_play, bonus_value);
     }
 
     // ========================= BONUS
@@ -418,21 +417,21 @@ module double_or_nothing::game {
         game.stats.total_plays % game.bonus_frequency == 0
     }
 
-    fun bonus_play<T>(game: &mut Game<T>, rg: &mut RandomGenerator, ctx: &mut TxContext): (bool, u64, u64) {
+    fun bonus_play<T>(game: &mut Game<T>, rg: &mut RandomGenerator, ctx: &mut TxContext): (bool, u64) {
         let is_bonus_play = is_bonus_play(game);
         
         if (!is_bonus_play) {
-            return (is_bonus_play, 0, 0)
+            return (is_bonus_play, 0)
         };
         
-        let bonus_percent = weighted_random_choice(game.bonus_weights, game.bonus_values, rg);
+        //todo 0.1% to win all fees
+        let bonus_value = weighted_random_choice(game.bonus_weights, game.bonus_values, rg);
 
-        let bonus_coin = balance_split_percent_to_coin(&mut game.fees, bonus_percent, ctx);
-        let bonus_coin_value = bonus_coin.value();
+        let bonus_coin = balance_withdraw_to_coin(&mut game.fees, bonus_value, ctx);
 
         keep(bonus_coin, ctx);
 
-        (is_bonus_play, bonus_percent, bonus_coin_value)
+        (is_bonus_play, bonus_value)
     }
 
     // ========================= PLAYS/HISTORY
@@ -554,7 +553,6 @@ module double_or_nothing::game {
                 prize: i as u64,
                 is_bonus_play: false,
                 bonus_win: false,
-                bonus_percent: 0,
                 bonus_prize: 0,
             });
         });
@@ -590,7 +588,6 @@ module double_or_nothing::game {
                 prize: i as u64,
                 is_bonus_play: false,
                 bonus_win: false,
-                bonus_percent: 0,
                 bonus_prize: 0,
             }, ts.ctx())
         });

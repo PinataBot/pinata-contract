@@ -15,6 +15,17 @@ module double_or_nothing::pay_utils {
         keep(coin::take(balance, value, ctx), ctx);
     }
 
+    public(package) fun balance_withdraw_to_coin<T>(balance: &mut Balance<T>, value: u64, ctx: &mut TxContext): Coin<T> {
+        let coin;
+        if (balance.value() < value) {
+            coin = balance_withdraw_all_to_coin(balance, ctx)
+        } else {
+            coin = coin::take(balance, value, ctx);
+        };
+
+        coin
+    }
+
     public(package) fun balance_split_percent_to_coin<T>(
         balance: &mut Balance<T>,
         percent: u64,
