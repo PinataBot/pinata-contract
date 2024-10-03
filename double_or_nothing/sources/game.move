@@ -31,16 +31,14 @@ module double_or_nothing::game {
     const INITIAL_BONUS_FREQUENCY: u64 = 25;
     const INITIAL_BONUS_WEIGHTS: vector<u64> = vector[20, 25, 25, 10, 10, 10];
     const INITIAL_BONUS_VALUES: vector<u64> = vector[0, 200, 600, 1000, 2000, 5000];
-    const INITIAL_TOTAL_BONUS_POOL_WIN_CHANCE: u64 = 999;
+    const INITIAL_TOTAL_BONUS_POOL_WIN_CHANCE: u64 = 1000;
     const INITIAL_LAST_PLAYS_SIZE: u64 = 10;
-    /// 10%
-    const MAX_FEE_PERCENTAGE: u64 = 10;
 
     // ========================= ERRORS =========================
 
     const ENotAuthorized: u64 = 0;
     const EInvalidBetValue: u64 = 1;
-    const EInvalidFeePercentage: u64 = 2;
+    const EInvalidPercentage: u64 = 2;
     const EGameBalanceInsufficient: u64 = 3;
     const EInvalidVectorLength: u64 = 4;
 
@@ -70,20 +68,45 @@ module double_or_nothing::game {
 
     public struct Game<phantom T> has key {
         id: UID,
+
+        // Game settings
+
+        /// Min bet value
         min_bet_value: u64,
+        /// Max bet value
         max_bet_value: u64,
+        /// Fee percentage. Fee is taken from the bet
         fee_percentage: u64,
+        /// Burn fee percentage. Percentage of the fee that is burned
         burn_fee_percentage: u64,
+        /// Bonus frequency. Every N plays is a bonus play
         bonus_frequency: u64,
+        /// Weights for bonus values random choice
         bonus_weights: vector<u64>,
+        /// Values for bonus values random choice
         bonus_values: vector<u64>,
+        /// There is 1 in total_bonus_pool_win_chance chance to win the whole bonus pool
         total_bonus_pool_win_chance: u64,
+
+        // Balances
+        
+        /// Main pool. All bets go here. Prizes are paid from here
         pool: Balance<T>,
+        /// Bonus pool. Part of the fee goes here. Bonus prizes are paid from here
         bonus_pool: Balance<T>,
 
-        last_plays: vector<Play>,
+        // Stats
+
+        /// General stats
         stats: Stats,
+        /// Stats per address
         stats_per_address: Table<address, Stats>,
+
+        // History
+
+        /// Last plays
+        last_plays: vector<Play>,
+        /// Plays per address. Address -> plays
         plays_per_address: Table<address, TableVec<Play>>,
     }
 
@@ -136,9 +159,9 @@ module double_or_nothing::game {
             total_bonus_pool_win_chance: INITIAL_TOTAL_BONUS_POOL_WIN_CHANCE,
             pool: balance::zero(),
             bonus_pool: balance::zero(),
-            last_plays: vector[],
             stats: new_stats(),
             stats_per_address: table::new(ctx),
+            last_plays: vector[],
             plays_per_address: table::new(ctx),
         };
 
@@ -189,9 +212,21 @@ module double_or_nothing::game {
     ) {
         game.assert_admin(cap);
 
-        assert!(percentage <= MAX_FEE_PERCENTAGE, EInvalidFeePercentage);
+        assert!(percentage <= 100, EInvalidPercentage);
 
         game.fee_percentage = percentage;
+    }
+
+    entry fun set_burn_fee_percentage<T>(
+        cap: &GameAdmin,
+        game: &mut Game<T>,
+        percentage: u64,
+    ) {
+        game.assert_admin(cap);
+
+        assert!(percentage <= 100, EInvalidPercentage);
+
+        game.burn_fee_percentage = percentage;
     }
 
     entry fun set_bonus_frequency<T>(
@@ -436,7 +471,7 @@ module double_or_nothing::game {
         
 
         // 1 in 1000 chance to win the whole bonus pool, 0.1%
-        let total_bonus_pool_win = rg.generate_u64_in_range(0, game.total_bonus_pool_win_chance) == 0;
+        let total_bonus_pool_win = rg.generate_u64_in_range(0, game.total_bonus_pool_win_chance - 1) == 0;
         
         let bonus_coin;
         if (total_bonus_pool_win) {
