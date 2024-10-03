@@ -13,7 +13,8 @@ module double_or_nothing::game {
         balance_withdraw,
         coin_split_percent_to_coin,
         balance_withdraw_to_coin,
-        burn_coin
+        burn_coin,
+        balance_withdraw_all_to_coin,
     };
     use double_or_nothing::random_utils::{weighted_random_choice};
 
@@ -421,10 +422,22 @@ module double_or_nothing::game {
             return (is_bonus_play, 0)
         };
         
-        //todo 0.1% to win all fees
-        let bonus_value = weighted_random_choice(game.bonus_weights, game.bonus_values, rg);
 
-        let bonus_coin = balance_withdraw_to_coin(&mut game.bonus_pool, bonus_value, ctx);
+        // 1 in 1000 chance to win the whole bonus pool, 0.1%
+        let total_bonus_pool_win = rg.generate_u64_in_range(0, 999) == 0;
+        let bonus_value: u64;
+        let bonus_coin;
+
+        if (total_bonus_pool_win) {
+            bonus_coin = balance_withdraw_all_to_coin(&mut game.bonus_pool, ctx);
+
+            bonus_value = bonus_coin.value();
+        } else {
+            bonus_value = weighted_random_choice(game.bonus_weights, game.bonus_values, rg);
+
+            bonus_coin = balance_withdraw_to_coin(&mut game.bonus_pool, bonus_value, ctx);
+        };
+        
 
         keep(bonus_coin, ctx);
 
