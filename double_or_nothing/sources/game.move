@@ -31,8 +31,8 @@ module double_or_nothing::game {
     const INITIAL_BONUS_FREQUENCY: u64 = 25;
     const INITIAL_BONUS_WEIGHTS: vector<u64> = vector[20, 25, 25, 10, 10, 10];
     const INITIAL_BONUS_VALUES: vector<u64> = vector[0, 200, 600, 1000, 2000, 5000];
+    const INITIAL_TOTAL_BONUS_POOL_WIN_CHANCE: u64 = 999;
     const INITIAL_LAST_PLAYS_SIZE: u64 = 10;
-
     /// 10%
     const MAX_FEE_PERCENTAGE: u64 = 10;
 
@@ -77,6 +77,7 @@ module double_or_nothing::game {
         bonus_frequency: u64,
         bonus_weights: vector<u64>,
         bonus_values: vector<u64>,
+        total_bonus_pool_win_chance: u64,
         pool: Balance<T>,
         bonus_pool: Balance<T>,
 
@@ -132,6 +133,7 @@ module double_or_nothing::game {
             bonus_frequency: INITIAL_BONUS_FREQUENCY,
             bonus_weights: INITIAL_BONUS_WEIGHTS,
             bonus_values: INITIAL_BONUS_VALUES,
+            total_bonus_pool_win_chance: INITIAL_TOTAL_BONUS_POOL_WIN_CHANCE,
             pool: balance::zero(),
             bonus_pool: balance::zero(),
             last_plays: vector[],
@@ -214,6 +216,16 @@ module double_or_nothing::game {
 
         game.bonus_weights = weights;
         game.bonus_values = values;
+    }
+
+    entry fun set_total_bonus_pool_win_chance<T>(
+        cap: &GameAdmin,
+        game: &mut Game<T>,
+        chance: u64,
+    ) {
+        game.assert_admin(cap);
+
+        game.total_bonus_pool_win_chance = chance;
     }
 
     entry fun withdraw_pool<T>(
@@ -424,20 +436,18 @@ module double_or_nothing::game {
         
 
         // 1 in 1000 chance to win the whole bonus pool, 0.1%
-        let total_bonus_pool_win = rg.generate_u64_in_range(0, 999) == 0;
-        let bonus_value: u64;
+        let total_bonus_pool_win = rg.generate_u64_in_range(0, game.total_bonus_pool_win_chance) == 0;
+        
         let bonus_coin;
-
         if (total_bonus_pool_win) {
             bonus_coin = balance_withdraw_all_to_coin(&mut game.bonus_pool, ctx);
-
-            bonus_value = bonus_coin.value();
         } else {
-            bonus_value = weighted_random_choice(game.bonus_weights, game.bonus_values, rg);
+            let choiced_value = weighted_random_choice(game.bonus_weights, game.bonus_values, rg);
 
-            bonus_coin = balance_withdraw_to_coin(&mut game.bonus_pool, bonus_value, ctx);
+            bonus_coin = balance_withdraw_to_coin(&mut game.bonus_pool, choiced_value, ctx);
         };
         
+        let bonus_value = bonus_coin.value();
 
         keep(bonus_coin, ctx);
 
