@@ -626,5 +626,31 @@ module double_or_nothing::game {
         ts::end(ts);
     }
 
+    #[test]
+    fun test_total_bonus_pool_win (){
+        let mut ts = ts::begin(ADMIN);
+
+        test_init(&mut ts);
+
+        ts.next_tx(ADMIN);
+        let r = ts.take_shared<Random>();
+
+        let mut rg = random::new_generator(&r, ts.ctx());
+
+        let mut wins_count = 0;
+        1000u64.do!(|_| {
+            let total_bonus_pool_win = rg.generate_u64_in_range(0, 999) == 0;
+            if (total_bonus_pool_win) {
+                wins_count = wins_count + 1;
+            }
+        });
+
+        print(&b"Total wins: ".to_string());
+        print(&wins_count);
+
+        ts::return_shared(r);
+        ts.end();
+    }
+
 }
 
