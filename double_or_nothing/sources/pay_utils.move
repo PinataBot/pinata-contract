@@ -3,6 +3,12 @@ module double_or_nothing::pay_utils {
     use sui::balance::{Balance};
     use sui::pay::{keep};
 
+    const NULL_ADDRESS: address = @0x0;
+
+    public(package) fun burn_coin<T>(coin: Coin<T>) {
+        transfer::public_transfer(coin, NULL_ADDRESS);
+    }
+
     public(package) fun balance_withdraw_all<T>(balance: &mut Balance<T>, ctx: &mut TxContext) {
         keep(coin::from_balance(balance.withdraw_all(), ctx), ctx);
     }

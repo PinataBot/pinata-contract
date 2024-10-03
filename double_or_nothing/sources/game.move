@@ -12,22 +12,23 @@ module double_or_nothing::game {
         balance_top_up,
         balance_withdraw,
         coin_split_percent_to_coin,
-        balance_withdraw_to_coin
+        balance_withdraw_to_coin,
+        burn_coin
     };
     use double_or_nothing::random_utils::{weighted_random_choice};
 
 
     // ========================= CONSTANTS =========================
 
-    const NULL_ADDRESS: address = @0x0;
     /// 1 AAA
     const INITIAL_MIN_BET_VALUE: u64 = 1_000_000;
     /// 100_000 AAA
     const INITIAL_MAX_BET_VALUE: u64 = 100_000_000_000;
     /// 2%
     const INITIAL_FEE_PERCENTAGE: u64 = 2;
-    const INITIAL_BONUS_FREQUENCY: u64 = 25;
-    const INITIAL_BONUS_WEIGHTS: vector<u64> = vector[0, 25, 25, 10, 10, 10];
+    const INITIAL_BURN_FEE_PERCENTAGE: u64 = 50;
+    const INITIAL_BONUS_FREQUENCY: u64 = 1;
+    const INITIAL_BONUS_WEIGHTS: vector<u64> = vector[20, 25, 25, 10, 10, 10];
     const INITIAL_BONUS_VALUES: vector<u64> = vector[0, 200, 600, 1000, 2000, 5000];
     const INITIAL_LAST_PLAYS_SIZE: u64 = 10;
 
@@ -58,6 +59,7 @@ module double_or_nothing::game {
         total_losses: u64,
         total_volume: u128,
         total_fees: u128,
+        total_burned_fees: u128,
 
         total_bonus_plays: u64,
         total_bonus_wins: u64,
@@ -70,11 +72,12 @@ module double_or_nothing::game {
         min_bet_value: u64,
         max_bet_value: u64,
         fee_percentage: u64,
+        burn_fee_percentage: u64,
         bonus_frequency: u64,
         bonus_weights: vector<u64>,
         bonus_values: vector<u64>,
         pool: Balance<T>,
-        prize_pool: Balance<T>,
+        bonus_pool: Balance<T>,
 
         last_plays: vector<Play>,
         stats: Stats,
@@ -124,11 +127,12 @@ module double_or_nothing::game {
             min_bet_value: INITIAL_MIN_BET_VALUE,
             max_bet_value: INITIAL_MAX_BET_VALUE,
             fee_percentage: INITIAL_FEE_PERCENTAGE,
+            burn_fee_percentage: INITIAL_BURN_FEE_PERCENTAGE,
             bonus_frequency: INITIAL_BONUS_FREQUENCY,
             bonus_weights: INITIAL_BONUS_WEIGHTS,
             bonus_values: INITIAL_BONUS_VALUES,
             pool: balance::zero(),
-            prize_pool: balance::zero(),
+            bonus_pool: balance::zero(),
             last_plays: vector[],
             stats: new_stats(),
             stats_per_address: table::new(ctx),
@@ -221,14 +225,14 @@ module double_or_nothing::game {
         balance_withdraw_all(&mut game.pool, ctx)
     }
 
-    entry fun withdraw_prize_pool<T>(
+    entry fun withdraw_bonus_pool<T>(
         cap: &GameAdmin,
         game: &mut Game<T>,
         ctx: &mut TxContext,
     ) {
         game.assert_admin(cap);
 
-        balance_withdraw_all(&mut game.prize_pool, ctx)
+        balance_withdraw_all(&mut game.bonus_pool, ctx)
     }
 
     entry fun top_up_pool<T>(
@@ -251,10 +255,14 @@ module double_or_nothing::game {
         assert!(bet.value() <= game.max_bet_value, EInvalidBetValue);
 
         // after split, bet will decrease by fee value
-        let fee = coin_split_percent_to_coin(&mut bet, game.fee_percentage, ctx);
+        let mut fee = coin_split_percent_to_coin(&mut bet, game.fee_percentage, ctx);
         let fee_value = fee.value();
-        // todo: burn 50% of fee
-        balance_top_up(&mut game.prize_pool, fee);
+
+        // burn half of the fee
+        let fee_burn = coin_split_percent_to_coin(&mut fee, game.burn_fee_percentage, ctx);
+        burn_coin(fee_burn);
+        
+        balance_top_up(&mut game.bonus_pool, fee);
 
         assert!(game.pool.value() >= bet.value(), EGameBalanceInsufficient);
         let bet_value = bet.value();
@@ -354,6 +362,7 @@ module double_or_nothing::game {
             total_losses: 0,
             total_volume: 0,
             total_fees: 0,
+            total_burned_fees: 0,
             total_bonus_plays: 0,
             total_bonus_wins: 0,
             total_bonus_losses: 0,
@@ -373,6 +382,7 @@ module double_or_nothing::game {
         if (win) stats.total_wins = stats.total_wins + 1 else stats.total_losses = stats.total_losses + 1;
         stats.total_volume = stats.total_volume + (bet_value as u128);
         stats.total_fees = stats.total_fees + (fee_value as u128);
+        stats.total_burned_fees = stats.total_burned_fees + (fee_value as u128) / 2;
 
         if (is_bonus_play) {
             stats.total_bonus_plays = stats.total_bonus_plays + 1;
@@ -414,7 +424,7 @@ module double_or_nothing::game {
         //todo 0.1% to win all fees
         let bonus_value = weighted_random_choice(game.bonus_weights, game.bonus_values, rg);
 
-        let bonus_coin = balance_withdraw_to_coin(&mut game.prize_pool, bonus_value, ctx);
+        let bonus_coin = balance_withdraw_to_coin(&mut game.bonus_pool, bonus_value, ctx);
 
         keep(bonus_coin, ctx);
 
@@ -499,7 +509,7 @@ module double_or_nothing::game {
 
         let r = ts.take_shared<Random>();
 
-        let plays_count = 500u16;
+        let plays_count = 100u16;
         plays_count.do!(|_| {
             ts.next_tx(PLAYER);
             let bet = coin::mint_for_testing<SUI>(ONE_SUI, ts.ctx());

@@ -55,8 +55,8 @@ module double_or_nothing::random_utils {
 
         let mut rg = random::new_generator(&r, ts.ctx());
 
-        let weights = vector[60, 25, 10, 5];
-        let values = vector[0, 2, 5, 10];
+        let weights = vector[20, 25, 25, 10, 10, 10];
+        let values = vector[0, 200, 600, 1000, 2000, 5000];
 
         let mut results = table::new<u64, u64>(ts.ctx());
         values.do!(|value| results.add(value, 0));
