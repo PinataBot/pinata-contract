@@ -28,7 +28,7 @@ module double_or_nothing::game {
     /// 2%
     const INITIAL_FEE_PERCENTAGE: u64 = 2;
     const INITIAL_BURN_FEE_PERCENTAGE: u64 = 50;
-    const INITIAL_BONUS_FREQUENCY: u64 = 1;
+    const INITIAL_BONUS_FREQUENCY: u64 = 25;
     const INITIAL_BONUS_WEIGHTS: vector<u64> = vector[20, 25, 25, 10, 10, 10];
     const INITIAL_BONUS_VALUES: vector<u64> = vector[0, 200, 600, 1000, 2000, 5000];
     const INITIAL_LAST_PLAYS_SIZE: u64 = 10;
