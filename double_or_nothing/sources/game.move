@@ -30,7 +30,7 @@ module double_or_nothing::game {
     const INITIAL_BURN_FEE_PERCENTAGE: u64 = 50;
     const INITIAL_BONUS_FREQUENCY: u64 = 25;
     const INITIAL_BONUS_WEIGHTS: vector<u64> = vector[20, 25, 25, 10, 10, 10];
-    const INITIAL_BONUS_VALUES: vector<u64> = vector[0, 200, 600, 1000, 2000, 5000];
+    const INITIAL_BONUS_VALUES: vector<u64> = vector[0, 200_000_000, 600_000_000, 1000_000_000, 2000_000_000, 5000_000_000];
     const INITIAL_TOTAL_BONUS_POOL_WIN_CHANCE: u64 = 1000;
     const INITIAL_LAST_PLAYS_SIZE: u64 = 10;
 
