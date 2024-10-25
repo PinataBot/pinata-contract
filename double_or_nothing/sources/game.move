@@ -6,7 +6,6 @@ module double_or_nothing::game {
     use sui::package::{Self, Publisher};
     use sui::event::{emit};
     use sui::table::{Self, Table};
-    use sui::table_vec::{Self, TableVec};
     use double_or_nothing::pay_utils::{
         balance_withdraw_all,
         balance_top_up,
@@ -106,8 +105,6 @@ module double_or_nothing::game {
 
         /// Last plays
         last_plays: vector<Play>,
-        /// Plays per address. Address -> plays
-        plays_per_address: Table<address, TableVec<Play>>,
     }
 
     // ========================= EVENTS =========================
@@ -162,7 +159,6 @@ module double_or_nothing::game {
             stats: new_stats(),
             stats_per_address: table::new(ctx),
             last_plays: vector[],
-            plays_per_address: table::new(ctx),
         };
 
         let id = object::id(&game);
@@ -342,8 +338,6 @@ module double_or_nothing::game {
 
         game.update_last_plays(play);
         
-        game.update_address_plays(play, ctx);
-
         emit(play);
     }
 
@@ -356,39 +350,6 @@ module double_or_nothing::game {
         game.stats_per_address[address]
     }
     
-    public fun get_address_plays_total_pages<T>(
-        game: &Game<T>,
-        address: address,
-    ): u64 {
-        let table_vec_plays = &game.plays_per_address[address];
-        let length = table_vec_plays.length();
-        (length - 1) / INITIAL_LAST_PLAYS_SIZE + 1
-    }
-
-    /// Return page of plays for the address 
-    /// Page is 0 based
-    /// Page contains INITIAL_LAST_PLAYS_SIZE(10) plays (or less if there are less plays)
-    public fun get_address_plays<T>(
-        game: &Game<T>,
-        address: address,
-        page: u64,
-    ): vector<Play> {
-        let mut plays: vector<Play> = vector[];
-
-        let table_vec_plays = &game.plays_per_address[address];
-        let length = table_vec_plays.length();
-        // let total_pages = (length - 1) / INITIAL_LAST_PLAYS_SIZE + 1;
-        let start = page * INITIAL_LAST_PLAYS_SIZE;
-        let mut end = (page + 1) * INITIAL_LAST_PLAYS_SIZE;
-        if (end > length) end = length;
-
-        (end-start).do!(|i| {
-            plays.push_back(table_vec_plays[start + i]);
-        });
-
-        plays
-    }
-
     // ========================= PRIVATE FUNCTIONS =========================
 
     // ========================= ASSERT
@@ -502,18 +463,6 @@ module double_or_nothing::game {
         last_plays.push_back(play);
     }
 
-    fun update_address_plays<T>(game: &mut Game<T>, play: Play, ctx: &mut TxContext) {
-        let address = ctx.sender();
-        
-        let plays_per_address = &mut game.plays_per_address;
-        if (!plays_per_address.contains(address)) {
-            plays_per_address.add(address, table_vec::empty(ctx));
-        };
-
-        plays_per_address[address].push_back(play);
-    }
-
-
     // ========================= TESTS =========================
 
     #[test_only] use std::debug::print;
@@ -615,58 +564,6 @@ module double_or_nothing::game {
         assert!(game.last_plays.length() == INITIAL_LAST_PLAYS_SIZE);
 
         print(&game);
-        ts::return_shared(game);
-        ts::end(ts);
-    }
-
-    #[test]
-    fun test_address_plays(){
-        let mut ts = ts::begin(ADMIN);
-        test_init(&mut ts);
-
-        ts.next_tx(ADMIN);
-        test_new(&mut ts);
-
-        ts.next_tx(ADMIN);
-
-        let mut game = ts.take_shared<Game<SUI>>();
-        let game_id = object::id(&game);
-        let r = ts.take_shared<Random>();
-
-        51u64.do!(|i| {
-            ts.next_tx(PLAYER);
-            game.update_address_plays(Play {
-                game: game_id,
-                player: PLAYER,
-                win: true,
-                bet: 100,
-                prize: i as u64,
-                is_bonus_play: false,
-                bonus_win: false,
-                bonus_prize: 0,
-            }, ts.ctx())
-        });
-
-        let total_pages = get_address_plays_total_pages(&game, PLAYER);
-        // print(&total_pages);
-        assert!(total_pages == 6);
-        
-        let zero_page_plays = game.get_address_plays(PLAYER, 0);
-        assert!(zero_page_plays.length() == INITIAL_LAST_PLAYS_SIZE);
-        assert!(zero_page_plays[0].prize == 0);
-        assert!(zero_page_plays[INITIAL_LAST_PLAYS_SIZE - 1].prize == 9);
-
-        let third_page_plays = game.get_address_plays(PLAYER, 3);
-        assert!(third_page_plays.length() == INITIAL_LAST_PLAYS_SIZE);
-        assert!(third_page_plays[0].prize == 30);
-        assert!(third_page_plays[INITIAL_LAST_PLAYS_SIZE - 1].prize == 39);
-
-        let last_page_plays = game.get_address_plays(PLAYER, total_pages - 1);
-        assert!(last_page_plays.length() == 1);
-        assert!(last_page_plays[0].prize == 50);
-
-        
-        ts::return_shared(r);
         ts::return_shared(game);
         ts::end(ts);
     }
