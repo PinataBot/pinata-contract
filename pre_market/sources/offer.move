@@ -1,7 +1,7 @@
 module pre_market::offer {
+    use usdc::usdc::USDC;
     use pre_market::market::{Market};
     use pre_market::utils::{withdraw_balance};
-    use whusdce::coin::COIN as USDC;
 
     use sui::coin::{Self, Coin};
     use sui::balance::{Balance};

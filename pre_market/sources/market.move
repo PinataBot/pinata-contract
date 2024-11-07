@@ -1,5 +1,5 @@
 module pre_market::market {
-    use whusdce::coin::COIN as USDC;
+    use usdc::usdc::USDC;
     use pre_market::utils::{withdraw_balance};
 
     use sui::coin::{Self, Coin, CoinMetadata};

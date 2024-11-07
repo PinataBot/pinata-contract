@@ -1,0 +1,12 @@
+[package]
+name = "sui_extensions"
+version = "0.0.1"
+edition = "2024.beta"
+published-at = "0xe0917b74a5912e4ad186ac634e29c922ab83903f71af7500969f9411706f9b9a"
+
+[dependencies]
+MoveStdlib = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/move-stdlib", rev = "framework/mainnet" }
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet" }
+
+[addresses]
+sui_extensions = "0xe0917b74a5912e4ad186ac634e29c922ab83903f71af7500969f9411706f9b9a"
