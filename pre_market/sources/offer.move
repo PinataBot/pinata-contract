@@ -44,7 +44,7 @@ module pre_market::offer {
         status: u8,
         /// Is the offer buy or sell
         /// true - buy, false - sell
-        is_buy: bool,
+        buy_or_sell: bool,
         /// Is the offer partial or not
         /// true - full, false - partial
         full_or_partial: bool,
@@ -91,7 +91,7 @@ module pre_market::offer {
 
     entry public fun create(
         market: &mut Market,
-        is_buy: bool,
+        buy_or_sell: bool,
         full_or_partial: bool,
         amount: u64,
         collateral_value: u64,
@@ -107,7 +107,7 @@ module pre_market::offer {
             id: object::new(ctx),
             market_id: object::id(market),
             status: ACTIVE,
-            is_buy,
+            buy_or_sell,
             full_or_partial,
             creator: ctx.sender(),
             filler: option::none(),
@@ -118,7 +118,7 @@ module pre_market::offer {
         };
 
         let fee = offer.split_fee(market, &mut coin, ctx);
-        market.add_offer(object::id(&offer), offer.is_buy, false, offer.collateral_value, offer.amount, fee, ctx);
+        market.add_offer(object::id(&offer), offer.buy_or_sell, false, offer.collateral_value, offer.amount, fee, ctx);
 
         coin::put(&mut offer.balance, coin);
         
@@ -131,7 +131,7 @@ module pre_market::offer {
         offer.assert_active();
         offer.assert_creator(ctx);
 
-        market.cancel_offer(object::id(offer), offer.is_buy, offer.collateral_value, offer.amount);
+        market.cancel_offer(object::id(offer), offer.buy_or_sell, offer.collateral_value, offer.amount);
         
         withdraw_balance(&mut offer.balance, ctx);
         offer.status = CANCELLED;
@@ -155,7 +155,7 @@ module pre_market::offer {
         offer.assert_full();
 
         let fee = offer.split_fee(market, &mut coin, ctx);
-        market.add_offer(object::id(offer), !offer.is_buy, true, offer.collateral_value, offer.amount, fee, ctx);
+        market.add_offer(object::id(offer), !offer.buy_or_sell, true, offer.collateral_value, offer.amount, fee, ctx);
 
         coin::put(&mut offer.balance, coin);
         offer.filler = option::some(ctx.sender());
@@ -179,7 +179,7 @@ module pre_market::offer {
         offer.assert_filled();
 
         let recipient: address;
-        if (offer.is_buy) {
+        if (offer.buy_or_sell) {
             // Maxim - Buy, Ernest - Sell
             // Ernest settles tokens
             // Maxim receives tokens
@@ -220,7 +220,7 @@ module pre_market::offer {
         market.assert_closed(clock);
         offer.assert_filled();
 
-        if (offer.is_buy) {
+        if (offer.buy_or_sell) {
             // Maxim - Buy, Ernest - Sell
             // Ernest doesn't settle tokens
             // Maxim can close the offer and withdraw the USDC deposit from 2 parties
@@ -324,7 +324,7 @@ module pre_market::offer {
             id,
             market_id: object::id(&market),
             status: ACTIVE,
-            is_buy: true,
+            buy_or_sell: true,
             full_or_partial: true,
             creator: sender,
             filler: option::none(),
