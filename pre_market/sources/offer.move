@@ -56,6 +56,8 @@ module pre_market::offer {
         /// Whole amount of the token
         /// Later this amount multiplied by 10^decimals of the token
         amount: u64,
+        /// Amount of filled tokens
+        filled_amount: u64,
         /// Total value in USDC with 6 decimals
         /// Creator has to deposit this amount in USDC
         /// Filler has to deposit this amount in USDC
@@ -79,7 +81,11 @@ module pre_market::offer {
         offer: ID,
     }
 
-    public struct OfferFilled has copy, drop {
+    public struct OfferFullFilled has copy, drop {
+        offer: ID,
+    }
+
+    public struct OfferPartialFilled has copy, drop {
         offer: ID,
     }
 
@@ -100,8 +106,9 @@ module pre_market::offer {
         ctx: &mut TxContext,
     ) {
         market.assert_active(clock);
-        assert!(amount > 0, EInvalidAmount);
-        assert!(collateral_value >= ONE_USDC, EInvalidCollateralValue);
+        assert_minimal_amount(amount);
+        assert_minimal_collateral_value(collateral_value);
+        
 
         let mut offer = Offer {
             id: object::new(ctx),
@@ -112,6 +119,7 @@ module pre_market::offer {
             creator: ctx.sender(),
             filler: option::none(),
             amount,
+            filled_amount: 0,
             collateral_value,
             balance: balance::zero(),
             created_at_timestamp_ms: clock.timestamp_ms(),
@@ -159,9 +167,37 @@ module pre_market::offer {
 
         coin::put(&mut offer.balance, coin);
         offer.filler = option::some(ctx.sender());
+        offer.filled_amount = offer.amount;
         offer.status = FILLED;
 
-        emit(OfferFilled { offer: object::id(offer) });
+        emit(OfferFullFilled { offer: object::id(offer) });
+    }
+
+    entry public fun partial_fill(
+        offer: &mut Offer, 
+        market: &mut Market,
+        amount: u64,
+        mut coin: Coin<USDC>, 
+        clock: &Clock,
+        ctx: &mut TxContext
+    ) {
+        market.assert_active(clock);
+        offer.assert_active();
+        offer.assert_not_creator(ctx);
+        offer.assert_partial();
+
+        assert_minimal_amount(amount);
+        assert!(amount <= offer.amount - offer.filled_amount, EInvalidAmount);
+
+        let fee = offer.split_fee_partial(market, &mut coin, amount, ctx);
+        market.add_offer(object::id(offer), !offer.buy_or_sell, true, offer.collateral_value, offer.amount, fee, ctx);
+
+        coin::put(&mut offer.balance, coin);
+        offer.filler = option::some(ctx.sender());
+        offer.filled_amount = offer.filled_amount + amount;
+        offer.status = if (offer.filled_amount >= offer.amount) { FILLED } else { PARTIAL_FILLED };
+
+        emit(OfferPartialFilled { offer: object::id(offer) });
     }
 
     /// Settle the offer
@@ -257,6 +293,21 @@ module pre_market::offer {
         fee
     }
 
+    fun split_fee_partial(offer: &Offer, market: &Market, coin: &mut Coin<USDC>, amount: u64, ctx: &mut TxContext): Coin<USDC> {
+        let partial_value = offer.collateral_value / offer.amount * amount;
+        // ensure that the partial value is not less than the minimal collateral value (1 USDC)
+        assert_minimal_collateral_value(partial_value);
+
+        let fee_value = partial_value * market.fee_percentage() / 100;
+
+        // if offer.collateral_value = 10 USDC, offer.amount = 10, amount = 5 => partial_value = 5 USDC, fee_value = 5 * 2 / 100 = 0.1 USDC
+        assert!(coin.value() == partial_value + fee_value, EInvalidPayment);
+
+        let fee = coin.split(fee_value, ctx);
+
+        fee
+    }
+
     fun assert_active(offer: &Offer) {
         assert!(offer.status == ACTIVE, EOfferInactive);
     }
@@ -290,6 +341,14 @@ module pre_market::offer {
     fun assert_partial(offer: &Offer) {
         assert!(!offer.full_or_partial, EOfferNotPartial);
     }    
+
+    fun assert_minimal_amount(amount: u64) {
+        assert!(amount > 0, EInvalidAmount);
+    }
+
+    fun assert_minimal_collateral_value(collateral_value: u64) {
+        assert!(collateral_value >= ONE_USDC, EInvalidCollateralValue);
+    }
     
     // ========================= TESTS =========================
     #[test_only] use pre_market::market;
@@ -330,6 +389,7 @@ module pre_market::offer {
             filler: option::none(),
             // price,
             amount,
+            filled_amount: 0,
             collateral_value,
             balance: balance::zero(),
             created_at_timestamp_ms: 0,
