@@ -3,11 +3,13 @@ module pre_market::offer {
     use pre_market::market::{Market};
     use pre_market::utils::{withdraw_balance};
 
+
     use sui::coin::{Self, Coin};
     use sui::balance::{Balance};
     use sui::balance::{Self};
     use sui::event::{emit};
     use sui::clock::Clock;
+    use sui::vec_map::{Self, VecMap};
 
     // ========================= CONSTANTS =========================
 
@@ -51,7 +53,9 @@ module pre_market::offer {
         /// Creator of the offer
         creator: address,
         /// Filled by
-        filler: Option<address>,
+        /// address -> amount
+        /// in single fill only 1 filler
+        fillers: VecMap<address, u64>,
         /// Amount of tokens T to buy/sell
         /// Whole amount of the token
         /// Later this amount multiplied by 10^decimals of the token
@@ -117,7 +121,7 @@ module pre_market::offer {
             buy_or_sell,
             single_or_partial,
             creator: ctx.sender(),
-            filler: option::none(),
+            fillers: vec_map::empty(),
             amount,
             filled_amount: 0,
             collateral_value,
@@ -147,6 +151,8 @@ module pre_market::offer {
         emit(OfferCanceled { offer: object::id(offer) });
     }
 
+    // TODO: merge single_fill and partial_fill
+
     /// Fill the offer with the USDC deposit
     /// After filling the offer, the balance of the offer is 2 * collateral_value
     /// And users have to wait settlement phase to settle the offer
@@ -166,8 +172,9 @@ module pre_market::offer {
         market.add_offer(object::id(offer), !offer.buy_or_sell, true, offer.collateral_value, offer.amount, fee, ctx);
 
         coin::put(&mut offer.balance, coin);
-        offer.filler = option::some(ctx.sender());
-        offer.filled_amount = offer.amount;
+        let amount = offer.amount;
+        offer.fillers.insert(ctx.sender(), amount);
+        offer.filled_amount = amount;
         offer.status = FILLED;
 
         emit(OfferSingleFilled { offer: object::id(offer) });
@@ -182,7 +189,7 @@ module pre_market::offer {
         ctx: &mut TxContext
     ) {
         market.assert_active(clock);
-        offer.assert_active();
+        offer.assert_active_or_partial_filled();
         offer.assert_not_creator(ctx);
         offer.assert_partial();
 
@@ -193,18 +200,20 @@ module pre_market::offer {
         market.add_offer(object::id(offer), !offer.buy_or_sell, true, offer.collateral_value, offer.amount, fee, ctx);
 
         coin::put(&mut offer.balance, coin);
-        offer.filler = option::some(ctx.sender());
+        offer.fillers.insert(ctx.sender(), amount);
         offer.filled_amount = offer.filled_amount + amount;
         offer.status = if (offer.filled_amount >= offer.amount) { FILLED } else { PARTIAL_FILLED };
 
         emit(OfferPartialFilled { offer: object::id(offer) });
     }
 
+    // TODO: merge single_settle_and_close and partial_settle_and_close
+
     /// Settle the offer
     /// After the offer is settled, the balance of the offer is 0
     /// Sender sends coins to the second party and withdraws the USDC deposit from 2 parties
     /// If there are no settlement after settlement phase, the second party can withdraw the USDC deposit from 2 parties
-    entry public fun settle_and_close<T>(
+    entry public fun single_settle_and_close<T>(
         offer: &mut Offer,
         market: &mut Market,
         coin: Coin<T>,
@@ -213,6 +222,7 @@ module pre_market::offer {
     ) {
         market.assert_settlement(clock);
         offer.assert_filled();
+        offer.assert_single();
 
         let recipient: address;
         if (offer.buy_or_sell) {
@@ -228,7 +238,7 @@ module pre_market::offer {
             // Ernest receives tokens
             // Maxim receives USDC deposit from 2 parties
             offer.assert_creator(ctx);
-            recipient = *offer.filler.borrow();
+            recipient = offer.fillers.keys()[0];
         };
 
         offer.assert_valid_settlement(market, &coin);
@@ -242,6 +252,16 @@ module pre_market::offer {
         market.update_closed_offers(object::id(offer));
 
         emit(OfferClosed { offer: object::id(offer) });
+    }
+
+    entry public fun partial_settle_and_close<T>(
+        // offer: &mut Offer,
+        // market: &mut Market,
+        // coin: Coin<T>,
+        // clock: &Clock,
+        // ctx: &mut TxContext
+    ) {
+
     }
 
     /// Close the offer
@@ -312,6 +332,10 @@ module pre_market::offer {
         assert!(offer.status == ACTIVE, EOfferInactive);
     }
 
+    fun assert_active_or_partial_filled(offer: &Offer) {
+        assert!(offer.status == ACTIVE || offer.status == PARTIAL_FILLED, EOfferInactive);
+    }
+
     fun assert_filled(offer: &Offer) {
         assert!(offer.status == FILLED, EOfferNotFilled);
     }
@@ -325,7 +349,7 @@ module pre_market::offer {
     }
 
     fun assert_filler(offer: &Offer, ctx: &TxContext) {
-        assert!(offer.filler.is_some() && offer.filler.borrow() == ctx.sender(), ENotFiller);
+        assert!(offer.fillers.contains(&ctx.sender()), ENotFiller);
     }
 
     fun assert_valid_settlement<T>(offer: &Offer, market: &Market, coin: &Coin<T>) {
@@ -386,7 +410,7 @@ module pre_market::offer {
             buy_or_sell: true,
             single_or_partial: true,
             creator: sender,
-            filler: option::none(),
+            fillers: vec_map::empty(),
             // price,
             amount,
             filled_amount: 0,
