@@ -31,7 +31,7 @@ module pre_market::offer {
     const ENotFiller: u64 = 6;
     const EInvalidSettlement: u64 = 7;
     const EOfferNotPartial: u64 = 8;
-    const EOfferNotFull: u64 = 9;
+    const EOfferNotSingle: u64 = 9;
 
     // ========================= STRUCTS =========================
 
@@ -46,8 +46,8 @@ module pre_market::offer {
         /// true - buy, false - sell
         buy_or_sell: bool,
         /// Is the offer partial or not
-        /// true - full, false - partial
-        full_or_partial: bool,
+        /// true - single, false - partial
+        single_or_partial: bool,
         /// Creator of the offer
         creator: address,
         /// Filled by
@@ -81,7 +81,7 @@ module pre_market::offer {
         offer: ID,
     }
 
-    public struct OfferFullFilled has copy, drop {
+    public struct OfferSingleFilled has copy, drop {
         offer: ID,
     }
 
@@ -98,7 +98,7 @@ module pre_market::offer {
     entry public fun create(
         market: &mut Market,
         buy_or_sell: bool,
-        full_or_partial: bool,
+        single_or_partial: bool,
         amount: u64,
         collateral_value: u64,
         mut coin: Coin<USDC>,
@@ -115,7 +115,7 @@ module pre_market::offer {
             market_id: object::id(market),
             status: ACTIVE,
             buy_or_sell,
-            full_or_partial,
+            single_or_partial,
             creator: ctx.sender(),
             filler: option::none(),
             amount,
@@ -150,7 +150,7 @@ module pre_market::offer {
     /// Fill the offer with the USDC deposit
     /// After filling the offer, the balance of the offer is 2 * collateral_value
     /// And users have to wait settlement phase to settle the offer
-    entry public fun full_fill(
+    entry public fun single_fill(
         offer: &mut Offer, 
         market: &mut Market,
         mut coin: Coin<USDC>, 
@@ -160,7 +160,7 @@ module pre_market::offer {
         market.assert_active(clock);
         offer.assert_active();
         offer.assert_not_creator(ctx);
-        offer.assert_full();
+        offer.assert_single();
 
         let fee = offer.split_fee(market, &mut coin, ctx);
         market.add_offer(object::id(offer), !offer.buy_or_sell, true, offer.collateral_value, offer.amount, fee, ctx);
@@ -170,7 +170,7 @@ module pre_market::offer {
         offer.filled_amount = offer.amount;
         offer.status = FILLED;
 
-        emit(OfferFullFilled { offer: object::id(offer) });
+        emit(OfferSingleFilled { offer: object::id(offer) });
     }
 
     entry public fun partial_fill(
@@ -334,12 +334,12 @@ module pre_market::offer {
         assert!(coin.value() == offer.amount * 10u64.pow(market.coin_decimals()), EInvalidSettlement);
     }
 
-    fun assert_full(offer: &Offer) {
-        assert!(offer.full_or_partial, EOfferNotFull);
+    fun assert_single(offer: &Offer) {
+        assert!(offer.single_or_partial, EOfferNotSingle);
     }
 
     fun assert_partial(offer: &Offer) {
-        assert!(!offer.full_or_partial, EOfferNotPartial);
+        assert!(!offer.single_or_partial, EOfferNotPartial);
     }    
 
     fun assert_minimal_amount(amount: u64) {
@@ -384,7 +384,7 @@ module pre_market::offer {
             market_id: object::id(&market),
             status: ACTIVE,
             buy_or_sell: true,
-            full_or_partial: true,
+            single_or_partial: true,
             creator: sender,
             filler: option::none(),
             // price,
