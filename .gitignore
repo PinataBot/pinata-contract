@@ -1,6 +1,4 @@
 .idea
-node_modules
-package-lock.json
 break_sui_pinata/.idea
 break_sui_pinata/Move.lock
 break_sui_pinata/build

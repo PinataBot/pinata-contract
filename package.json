@@ -1,6 +1,0 @@
-{
-  "dependencies": {
-    "prettier": "^3.1.1",
-    "prettier-plugin-move": "file:../sui/external-crates/move/crates/move-analyzer/prettier-plugin"
-  }
-}
