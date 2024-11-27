@@ -316,7 +316,9 @@ module pre_market::market {
         if (!address_offers.contains(address)) {
             address_offers.add(address, vector::empty());
         };
-        address_offers[address].push_back(offer_id);
+        if(!address_offers[address].contains(&offer_id)) {
+            address_offers[address].push_back(offer_id);
+        };
         
         // Add offers only when creating an offer
         // Do not add when filling an offer due to mirroring
@@ -327,7 +329,9 @@ module pre_market::market {
                 market.sell_offers.add(offer_id, offer_id);
             }
         } else {
-            market.filled_offers.add(offer_id, offer_id);
+            if (!market.filled_offers.contains(offer_id)) {
+                market.filled_offers.add(offer_id, offer_id);
+            }
         }
     }
 

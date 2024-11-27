@@ -1,7 +1,7 @@
 module pre_market::partial_offer {
     use usdc::usdc::USDC;
     use pre_market::market::{Market};
-    use pre_market::utils::{withdraw_balance};
+    use pre_market::utils::{withdraw_balance, withdraw_balance_value};
 
     use sui::coin::{Self, Coin};
     use sui::balance::{Balance};
@@ -18,8 +18,9 @@ module pre_market::partial_offer {
     const ACTIVE: u8 = 0;
     const PARTIAL_FILLED: u8 = 1;
     const CANCELLED: u8 = 2;
-    const FILLED: u8 = 3;
-    const CLOSED: u8 = 4;
+    const PARTIAL_CANCELLED: u8 = 3;
+    const FILLED: u8 = 4;
+    const CLOSED: u8 = 5;
 
     // ========================= ERRORS =========================
 
@@ -48,7 +49,6 @@ module pre_market::partial_offer {
         creator: address,
         /// Filled by
         /// address -> amount
-        /// in single fill only 1 filler
         fillers: VecMap<address, u64>,
         /// Amount of tokens T to buy/sell
         /// Whole amount of the token
@@ -102,7 +102,6 @@ module pre_market::partial_offer {
         assert_minimal_amount(amount);
         assert_minimal_collateral_value(collateral_value);
         
-
         let mut offer = PartialOffer {
             id: object::new(ctx),
             market_id: object::id(market),
@@ -129,13 +128,28 @@ module pre_market::partial_offer {
 
     // todo: check if partially filled
     entry public fun cancel(offer: &mut PartialOffer, market: &mut Market, ctx: &mut TxContext) {
-        offer.assert_active();
+        offer.assert_fillable();
         offer.assert_creator(ctx);
-
-        market.cancel_offer(object::id(offer), offer.buy_or_sell, offer.collateral_value, offer.amount);
         
-        withdraw_balance(&mut offer.balance, ctx);
-        offer.status = CANCELLED;
+        if (offer.status == ACTIVE) {
+            market.cancel_offer(object::id(offer), offer.buy_or_sell, offer.collateral_value, offer.amount);
+        
+            withdraw_balance(&mut offer.balance, ctx);
+            offer.status = CANCELLED;
+        } else {
+            let filled_amount = offer.filled_amount;
+            let unfilled_amount = offer.amount - filled_amount;
+
+            // collateral value  = 10 USDC, amount = 10, filled_amount = 5
+            // unfilled_amount = 10 - 5 = 5
+            // unfilled_collateral_value = 10 - 5 * 10 / 10 = 5
+            let unfilled_collateral_value = offer.balance.value() - filled_amount * offer.collateral_value / offer.amount;
+
+            market.cancel_offer(object::id(offer), offer.buy_or_sell, unfilled_collateral_value, unfilled_amount);
+
+            withdraw_balance_value(&mut offer.balance, unfilled_collateral_value, ctx);
+            offer.status = PARTIAL_CANCELLED;
+        };
         
         emit(OfferCanceled { offer: object::id(offer) });
     }
@@ -149,7 +163,7 @@ module pre_market::partial_offer {
         ctx: &mut TxContext
     ) {
         market.assert_active(clock);
-        offer.assert_active_or_partial_filled();
+        offer.assert_fillable();
         offer.assert_not_creator(ctx);
 
         assert_minimal_amount(amount);
@@ -159,7 +173,7 @@ module pre_market::partial_offer {
         market.add_offer(object::id(offer), !offer.buy_or_sell, true, offer.collateral_value, offer.amount, fee, ctx);
 
         coin::put(&mut offer.balance, coin);
-        offer.fillers.insert(ctx.sender(), amount);
+        offer.add_filler(ctx.sender(), amount);
         offer.filled_amount = offer.filled_amount + amount;
         offer.status = if (offer.filled_amount >= offer.amount) { FILLED } else { PARTIAL_FILLED };
 
@@ -171,7 +185,7 @@ module pre_market::partial_offer {
     /// After the offer is settled, the balance of the offer is 0
     /// Sender sends coins to the second party and withdraws the USDC deposit from 2 parties
     /// If there are no settlement after settlement phase, the second party can withdraw the USDC deposit from 2 parties
-    // entry public fun single_settle_and_close<T>(
+    // entry public fun settle_and_close<T>(
     //     offer: &mut PartialOffer,
     //     market: &mut Market,
     //     coin: Coin<T>,
@@ -232,7 +246,7 @@ module pre_market::partial_offer {
         ctx: &mut TxContext
     ) {
         market.assert_closed(clock);
-        offer.assert_filled();
+        offer.assert_closable();
 
         if (offer.buy_or_sell) {
             // Maxim - Buy, Ernest - Sell
@@ -290,12 +304,20 @@ module pre_market::partial_offer {
         assert!(offer.status == ACTIVE, EOfferInactive);
     }
 
-    fun assert_active_or_partial_filled(offer: &PartialOffer) {
+    fun assert_fillable(offer: &PartialOffer) {
         assert!(offer.status == ACTIVE || offer.status == PARTIAL_FILLED, EOfferInactive);
+    }
+
+    fun assert_partial_filled(offer: &PartialOffer) {
+        assert!(offer.status == PARTIAL_FILLED, EOfferNotFilled);
     }
 
     fun assert_filled(offer: &PartialOffer) {
         assert!(offer.status == FILLED, EOfferNotFilled);
+    }
+
+    fun assert_closable(offer: &PartialOffer) {
+        assert!(offer.status == FILLED || offer.status == PARTIAL_FILLED || offer.status == PARTIAL_CANCELLED, EOfferNotFilled);
     }
 
     fun assert_creator(offer: &PartialOffer, ctx: &TxContext) {
@@ -322,6 +344,15 @@ module pre_market::partial_offer {
 
     fun assert_minimal_collateral_value(collateral_value: u64) {
         assert!(collateral_value >= ONE_USDC, EInvalidCollateralValue);
+    }
+
+    fun add_filler(offer: &mut PartialOffer, address: address, amount: u64) {
+        if (offer.fillers.contains(&address)) {
+            let current_amount = offer.fillers.get_mut(&address);
+            *current_amount = *current_amount + amount;
+        } else {
+            offer.fillers.insert(address, amount);
+        }
     }
     
     // ========================= TESTS =========================
