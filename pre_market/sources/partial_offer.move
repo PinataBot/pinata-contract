@@ -1,7 +1,7 @@
 module pre_market::partial_offer {
     use usdc::usdc::USDC;
     use pre_market::market::{Market};
-    use pre_market::utils::{withdraw_balance, withdraw_balance_value};
+    use pre_market::utils::{withdraw_balance, withdraw_balance_value, withdraw_balance_to_coin};
 
     use sui::coin::{Self, Coin};
     use sui::balance::{Balance};
@@ -21,6 +21,7 @@ module pre_market::partial_offer {
     const FILLED: u8 = 3;
     const PARTIAL_FILLED: u8 = 4;
     const CLOSED: u8 = 5;
+    const PARTIAL_CLOSED: u8 = 6;
 
     // ========================= ERRORS =========================
 
@@ -225,15 +226,60 @@ module pre_market::partial_offer {
     //     emit(OfferClosed { offer: object::id(offer) });
     // }
 
-    // TODO: implement
+    // TODO: add tests
     entry public fun settle_and_close<T>(
-        // offer: &mut Offer,
-        // market: &mut Market,
-        // coin: Coin<T>,
-        // clock: &Clock,
-        // ctx: &mut TxContext
+        offer: &mut PartialOffer,
+        market: &mut Market,
+        mut coin: Coin<T>,
+        clock: &Clock,
+        ctx: &mut TxContext
     ) {
+        market.assert_settlement(clock);
+        offer.assert_closable();
 
+        if (offer.buy_or_sell) {
+            // Maxim - Buy, Ernest and others - Sell
+            // Ernest and others settles tokens
+            // Maxim receives tokens
+            // Ernest and others receives USDC deposit from their filled amount
+            offer.assert_filler(ctx);
+
+            transfer::public_transfer(coin, offer.creator);
+
+            let filler_amount = offer.fillers.get_mut(&ctx.sender());
+            let filler_value = offer.collateral_value / offer.amount * *filler_amount;
+
+            withdraw_balance_value(&mut offer.balance, filler_value, ctx);
+
+            offer.status = if (offer.balance.value() > 0) { PARTIAL_CLOSED } else { CLOSED };
+        } else {
+            // Maxim - Sell, Ernest - Buy
+            // Maxim settles tokens
+            // Ernest receives tokens
+            // Maxim receives USDC deposit from all parties
+            offer.assert_creator(ctx);
+
+            offer.assert_valid_full_settlement(market, &coin);
+
+            let (addresses, amounts) = offer.fillers.into_keys_values();
+
+            addresses.length().do!(|i| {
+                let address = addresses[i];
+                let amount = amounts[i];
+
+                let coin = coin.split(amount * 10u64.pow(market.coin_decimals()), ctx);
+                transfer::public_transfer(coin, address);
+            });
+            coin.destroy_zero();
+
+            withdraw_balance(&mut offer.balance, ctx);
+
+            offer.status = CLOSED;
+
+            market.update_closed_offers(object::id(offer));
+
+            emit(OfferClosed { offer: object::id(offer) });
+        };       
     }
 
     /// Close the offer
@@ -250,17 +296,31 @@ module pre_market::partial_offer {
 
         if (offer.buy_or_sell) {
             // Maxim - Buy, Ernest - Sell
-            // Ernest doesn't settle tokens
-            // Maxim can close the offer and withdraw the USDC deposit from 2 parties
+            // Someoune of fillers doesn't settle tokens
+            // Maxim can close the offer and withdraw unfilled USDC deposits from all unfilled parties
             offer.assert_creator(ctx);
+
+            withdraw_balance(&mut offer.balance, ctx);
         } else {
             // Maxim - Sell, Ernest - Buy
             // Maxim doesn't settle tokens
-            // Ernest can close the offer and withdraw the USDC deposit from 2 parties
+            // Ernest can close the offer and withdraw the USDC deposit to all fillers
             offer.assert_filler(ctx);
-        };
 
-        withdraw_balance(&mut offer.balance, ctx);
+            let (addresses, amounts) = offer.fillers.into_keys_values();
+
+            let mut balance_coin = withdraw_balance_to_coin(&mut offer.balance, ctx);
+            addresses.length().do!(|i| {
+                let address = addresses[i];
+                let amount = amounts[i];
+
+                let collater_value = 2 * offer.collateral_value / offer.amount * amount;
+
+                let coin = balance_coin.split(collater_value, ctx);
+                transfer::public_transfer(coin, address);
+            });
+            balance_coin.destroy_zero();
+        };
 
         offer.status = CLOSED;
 
@@ -328,7 +388,7 @@ module pre_market::partial_offer {
     }
 
     fun assert_closable(offer: &PartialOffer) {
-        assert!(offer.status == FILLED || offer.status == PARTIAL_FILLED || offer.status == PARTIAL_CANCELLED, EOfferNotFilled);
+        assert!(offer.status == FILLED || offer.status == PARTIAL_FILLED || offer.status == PARTIAL_CANCELLED || offer.status == PARTIAL_CLOSED, EOfferNotFilled);
     }
 
     fun assert_creator(offer: &PartialOffer, ctx: &TxContext) {
@@ -343,10 +403,10 @@ module pre_market::partial_offer {
         assert!(offer.fillers.contains(&ctx.sender()), ENotFiller);
     }
 
-    fun assert_valid_settlement<T>(offer: &PartialOffer, market: &Market, coin: &Coin<T>) {
+    fun assert_valid_full_settlement<T>(offer: &PartialOffer, market: &Market, coin: &Coin<T>) {
         market.assert_coin_type<T>();
 
-        assert!(coin.value() == offer.amount * 10u64.pow(market.coin_decimals()), EInvalidSettlement);
+        assert!(coin.value() == offer.filled_amount * 10u64.pow(market.coin_decimals()), EInvalidSettlement);
     }
 
     fun assert_minimal_amount(amount: u64) {
