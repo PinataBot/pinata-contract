@@ -278,6 +278,8 @@ module pre_market::single_offer {
     #[test_only] use pre_market::market;
 
     #[test_only] use sui::test_scenario as ts;
+    #[test_only] use sui::test_utils::{Self, assert_eq};
+    #[test_only] use std::debug::print;
 
     #[test]
     fun test_payment() {
@@ -292,15 +294,15 @@ module pre_market::single_offer {
         // 1 USDC = 10^6
         let collateral_value = ONE_USDC;
         let amount = 1000;
-        std::debug::print(&collateral_value);
+        print(&collateral_value);
         let fee_value = collateral_value * market.fee_percentage() / 100;
-        std::debug::print(&fee_value);
+        print(&fee_value);
         let coin_value = collateral_value + fee_value;
-        std::debug::print(&coin_value);
+        print(&coin_value);
 
         let mut coin = coin::mint_for_testing<USDC>(coin_value, ts::ctx(&mut ts));
         ts::next_tx(&mut ts, sender);
-        // std::debug::print(&coin);
+        // print(&coin);
 
         let id = object::new(ts::ctx(&mut ts));
         let offer = SingleOffer {
@@ -322,10 +324,10 @@ module pre_market::single_offer {
         let offer = ts::take_shared<SingleOffer>(&ts);
         let fee = offer.split_fee(&market, &mut coin, ts::ctx(&mut ts));
         ts::next_tx(&mut ts, sender);
-        // std::debug::print(&fee);
+        // print(&fee);
 
-        assert!(coin.value() == collateral_value);
-        assert!(fee.value() == fee_value);
+        assert_eq(coin.value(), collateral_value);
+        assert_eq(fee.value(), fee_value);
         
         ts::return_shared(market);
         ts::return_shared(offer);
