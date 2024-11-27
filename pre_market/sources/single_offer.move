@@ -1,19 +1,18 @@
 module pre_market::single_offer;
-use usdc::usdc::USDC;
-use pre_market::market::{Market};
-use pre_market::utils::{withdraw_balance};
 
-use sui::coin::{Self, Coin};
-use sui::balance::{Balance};
-use sui::balance::{Self};
-use sui::event::{emit};
+use pre_market::market::Market;
+use pre_market::utils::withdraw_balance;
+use sui::balance::{Self, Balance};
 use sui::clock::Clock;
+use sui::coin::{Self, Coin};
+use sui::event::emit;
+use usdc::usdc::USDC;
 
 // ========================= CONSTANTS =========================
 
 const ONE_USDC: u64 = 1_000_000;
 
-// ========================= Statuses 
+// ========================= Statuses
 //todo: Change to enum
 const ACTIVE: u8 = 0;
 const CANCELLED: u8 = 1;
@@ -84,13 +83,13 @@ public struct OfferClosed has copy, drop {
 
 // ========================= PUBLIC FUNCTIONS =========================
 
-entry public fun create(
+public entry fun create(
     market: &mut Market,
     buy_or_sell: bool,
     amount: u64,
     collateral_value: u64,
     mut coin: Coin<USDC>,
-    clock: &Clock, 
+    clock: &Clock,
     ctx: &mut TxContext,
 ) {
     market.assert_active(clock);
@@ -111,43 +110,59 @@ entry public fun create(
     };
 
     let fee = offer.split_fee(market, &mut coin, ctx);
-    market.add_offer(object::id(&offer), offer.buy_or_sell, false, offer.collateral_value, offer.amount, fee, ctx);
+    market.add_offer(
+        object::id(&offer),
+        offer.buy_or_sell,
+        false,
+        offer.collateral_value,
+        offer.amount,
+        fee,
+        ctx,
+    );
 
     coin::put(&mut offer.balance, coin);
-    
+
     emit(OfferCreated { offer: object::id(&offer) });
 
     transfer::share_object(offer);
 }
 
-entry public fun cancel(offer: &mut SingleOffer, market: &mut Market, ctx: &mut TxContext) {
+public entry fun cancel(offer: &mut SingleOffer, market: &mut Market, ctx: &mut TxContext) {
     offer.assert_active();
     offer.assert_creator(ctx);
 
     market.cancel_offer(object::id(offer), offer.buy_or_sell, offer.collateral_value, offer.amount);
-    
+
     withdraw_balance(&mut offer.balance, ctx);
     offer.status = CANCELLED;
-    
+
     emit(OfferCanceled { offer: object::id(offer) });
 }
 
 /// Fill the offer with the USDC deposit
 /// After filling the offer, the balance of the offer is 2 * collateral_value
 /// And users have to wait settlement phase to settle the offer
-entry public fun fill(
-    offer: &mut SingleOffer, 
+public entry fun fill(
+    offer: &mut SingleOffer,
     market: &mut Market,
-    mut coin: Coin<USDC>, 
+    mut coin: Coin<USDC>,
     clock: &Clock,
-    ctx: &mut TxContext
+    ctx: &mut TxContext,
 ) {
     market.assert_active(clock);
     offer.assert_active();
     offer.assert_not_creator(ctx);
 
     let fee = offer.split_fee(market, &mut coin, ctx);
-    market.add_offer(object::id(offer), !offer.buy_or_sell, true, offer.collateral_value, offer.amount, fee, ctx);
+    market.add_offer(
+        object::id(offer),
+        !offer.buy_or_sell,
+        true,
+        offer.collateral_value,
+        offer.amount,
+        fee,
+        ctx,
+    );
 
     coin::put(&mut offer.balance, coin);
     offer.filler = option::some(ctx.sender());
@@ -160,12 +175,12 @@ entry public fun fill(
 /// After the offer is settled, the balance of the offer is 0
 /// Sender sends coins to the second party and withdraws the USDC deposit from 2 parties
 /// If there are no settlement after settlement phase, the second party can withdraw the USDC deposit from 2 parties
-entry public fun settle_and_close<T>(
+public entry fun settle_and_close<T>(
     offer: &mut SingleOffer,
     market: &mut Market,
     coin: Coin<T>,
     clock: &Clock,
-    ctx: &mut TxContext
+    ctx: &mut TxContext,
 ) {
     market.assert_settlement(clock);
     offer.assert_filled();
@@ -188,7 +203,7 @@ entry public fun settle_and_close<T>(
     };
 
     offer.assert_valid_settlement(market, &coin);
-    
+
     transfer::public_transfer(coin, recipient);
 
     withdraw_balance(&mut offer.balance, ctx);
@@ -203,11 +218,11 @@ entry public fun settle_and_close<T>(
 /// Close the offer
 /// After the settlement phase, if the offer is not settled, the second party can close the offer
 /// And withdraw the USDC deposit from 2 parties
-entry public fun close(
+public entry fun close(
     offer: &mut SingleOffer,
     market: &mut Market,
     clock: &Clock,
-    ctx: &mut TxContext
+    ctx: &mut TxContext,
 ) {
     market.assert_closed(clock);
     offer.assert_filled();
@@ -229,17 +244,21 @@ entry public fun close(
     offer.status = CLOSED;
 
     market.update_closed_offers(object::id(offer));
-    
+
     emit(OfferClosed { offer: object::id(offer) });
 }
-
 
 // ========================= PRIVATE FUNCTIONS =========================
 
 // 1UDSC: 1_000_000
 // 1_000_000 * 2 / 100 = 20_000
-// 1_000_000 + 20_000 = 1_020_000 
-fun split_fee(offer: &SingleOffer, market: &Market, coin: &mut Coin<USDC>, ctx: &mut TxContext): Coin<USDC> {        
+// 1_000_000 + 20_000 = 1_020_000
+fun split_fee(
+    offer: &SingleOffer,
+    market: &Market,
+    coin: &mut Coin<USDC>,
+    ctx: &mut TxContext,
+): Coin<USDC> {
     let fee_value = offer.collateral_value * market.fee_percentage() / 100;
 
     assert!(coin.value() == offer.collateral_value + fee_value, EInvalidPayment);
@@ -276,11 +295,15 @@ fun assert_valid_settlement<T>(offer: &SingleOffer, market: &Market, coin: &Coin
 }
 
 // ========================= TESTS =========================
-#[test_only] use pre_market::market;
+#[test_only]
+use pre_market::market;
 
-#[test_only] use sui::test_scenario as ts;
-#[test_only] use sui::test_utils::{Self, assert_eq};
-#[test_only] use std::debug::print;
+#[test_only]
+use sui::test_scenario as ts;
+#[test_only]
+use sui::test_utils::{Self, assert_eq};
+#[test_only]
+use std::debug::print;
 
 #[test]
 fun test_payment() {
@@ -329,7 +352,7 @@ fun test_payment() {
 
     assert_eq(coin.value(), collateral_value);
     assert_eq(fee.value(), fee_value);
-    
+
     ts::return_shared(market);
     ts::return_shared(offer);
     coin::burn_for_testing(coin);
