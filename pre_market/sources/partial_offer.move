@@ -16,10 +16,10 @@ module pre_market::partial_offer {
 
     // ========================= Statuses 
     const ACTIVE: u8 = 0;
-    const PARTIAL_FILLED: u8 = 1;
-    const CANCELLED: u8 = 2;
-    const PARTIAL_CANCELLED: u8 = 3;
-    const FILLED: u8 = 4;
+    const CANCELLED: u8 = 1;
+    const PARTIAL_CANCELLED: u8 = 2;
+    const FILLED: u8 = 3;
+    const PARTIAL_FILLED: u8 = 4;
     const CLOSED: u8 = 5;
 
     // ========================= ERRORS =========================
@@ -300,6 +300,17 @@ module pre_market::partial_offer {
         fee
     }
 
+    fun add_filler(offer: &mut PartialOffer, address: address, amount: u64) {
+        if (offer.fillers.contains(&address)) {
+            let current_amount = offer.fillers.get_mut(&address);
+            *current_amount = *current_amount + amount;
+        } else {
+            offer.fillers.insert(address, amount);
+        }
+    }
+
+    // ========================= Asserts
+
     fun assert_active(offer: &PartialOffer) {
         assert!(offer.status == ACTIVE, EOfferInactive);
     }
@@ -344,15 +355,6 @@ module pre_market::partial_offer {
 
     fun assert_minimal_collateral_value(collateral_value: u64) {
         assert!(collateral_value >= ONE_USDC, EInvalidCollateralValue);
-    }
-
-    fun add_filler(offer: &mut PartialOffer, address: address, amount: u64) {
-        if (offer.fillers.contains(&address)) {
-            let current_amount = offer.fillers.get_mut(&address);
-            *current_amount = *current_amount + amount;
-        } else {
-            offer.fillers.insert(address, amount);
-        }
     }
     
     // ========================= TESTS =========================
