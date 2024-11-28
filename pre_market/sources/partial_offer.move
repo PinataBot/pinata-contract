@@ -13,16 +13,6 @@ use usdc::usdc::USDC;
 
 const ONE_USDC: u64 = 1_000_000;
 
-// ========================= Statuses
-//todo: Change to enum
-const ACTIVE: u8 = 0;
-const CANCELLED: u8 = 1;
-const PARTIAL_CANCELLED: u8 = 2;
-const FILLED: u8 = 3;
-const PARTIAL_FILLED: u8 = 4;
-const CLOSED: u8 = 5;
-const PARTIAL_CLOSED: u8 = 6;
-
 // ========================= ERRORS =========================
 
 const EInvalidAmount: u64 = 0;
@@ -36,13 +26,23 @@ const EInvalidSettlement: u64 = 7;
 
 // ========================= STRUCTS =========================
 
+public enum Status has copy, store, drop {
+    Active,
+    Cancelled,
+    PartialCancelled,
+    Filled,
+    PartialFilled,
+    Closed,
+    PartialClosed,
+}
+
 public struct PartialOffer has key {
     /// Offer ID
     id: UID,
     /// Market ID
     market_id: ID,
     /// Status of the offer. 0 - Active, 1 - Cancelled, 2 - Filled, 3 - Closed
-    status: u8,
+    status: Status,
     /// Is the offer buy or sell
     /// true - buy, false - sell
     buy_or_sell: bool,
@@ -106,7 +106,7 @@ public entry fun create(
     let mut offer = PartialOffer {
         id: object::new(ctx),
         market_id: object::id(market),
-        status: ACTIVE,
+        status: Status::Active,
         buy_or_sell,
         creator: ctx.sender(),
         fillers: vec_map::empty(),
@@ -140,7 +140,7 @@ public entry fun cancel(offer: &mut PartialOffer, market: &mut Market, ctx: &mut
     offer.assert_fillable();
     offer.assert_creator(ctx);
 
-    if (offer.status == ACTIVE) {
+    if (offer.status == Status::Active) {
         market.cancel_offer(
             object::id(offer),
             offer.buy_or_sell,
@@ -149,7 +149,7 @@ public entry fun cancel(offer: &mut PartialOffer, market: &mut Market, ctx: &mut
         );
 
         withdraw_balance(&mut offer.balance, ctx);
-        offer.status = CANCELLED;
+        offer.status = Status::Cancelled;
     } else {
         let filled_amount = offer.filled_amount;
         let unfilled_amount = offer.amount - filled_amount;
@@ -168,7 +168,7 @@ public entry fun cancel(offer: &mut PartialOffer, market: &mut Market, ctx: &mut
         );
 
         withdraw_balance_value(&mut offer.balance, unfilled_collateral_value, ctx);
-        offer.status = PARTIAL_CANCELLED;
+        offer.status = Status::PartialCancelled;
     };
 
     emit(OfferCanceled { offer: object::id(offer) });
@@ -204,58 +204,13 @@ public entry fun fill(
     offer.add_filler(ctx.sender(), amount);
     offer.filled_amount = offer.filled_amount + amount;
     offer.status = if (offer.filled_amount >= offer.amount) {
-            FILLED
+            Status::Filled
         } else {
-            PARTIAL_FILLED
+            Status::PartialFilled
         };
 
     emit(OfferFilled { offer: object::id(offer) });
 }
-
-/// --- from single_offer
-/// Settle the offer
-/// After the offer is settled, the balance of the offer is 0
-/// Sender sends coins to the second party and withdraws the USDC deposit from 2 parties
-/// If there are no settlement after settlement phase, the second party can withdraw the USDC deposit from 2 parties
-// entry public fun settle_and_close<T>(
-//     offer: &mut PartialOffer,
-//     market: &mut Market,
-//     coin: Coin<T>,
-//     clock: &Clock,
-//     ctx: &mut TxContext
-// ) {
-//     market.assert_settlement(clock);
-//     offer.assert_filled();
-
-//     let recipient: address;
-//     if (offer.buy_or_sell) {
-//         // Maxim - Buy, Ernest - Sell
-//         // Ernest settles tokens
-//         // Maxim receives tokens
-//         // Ernest receives USDC deposit from 2 parties
-//         offer.assert_filler(ctx);
-//         recipient = offer.creator;
-//     } else {
-//         // Maxim - Sell, Ernest - Buy
-//         // Maxim settles tokens
-//         // Ernest receives tokens
-//         // Maxim receives USDC deposit from 2 parties
-//         offer.assert_creator(ctx);
-//         recipient = offer.fillers.keys()[0];
-//     };
-
-//     offer.assert_valid_settlement(market, &coin);
-
-//     transfer::public_transfer(coin, recipient);
-
-//     withdraw_balance(&mut offer.balance, ctx);
-
-//     offer.status = CLOSED;
-
-//     market.update_closed_offers(object::id(offer));
-
-//     emit(OfferClosed { offer: object::id(offer) });
-// }
 
 // TODO: add tests
 public entry fun settle_and_close<T>(
@@ -283,9 +238,9 @@ public entry fun settle_and_close<T>(
         withdraw_balance_value(&mut offer.balance, filler_value, ctx);
 
         offer.status = if (offer.balance.value() > 0) {
-                PARTIAL_CLOSED
+                Status::PartialClosed
             } else {
-                CLOSED
+                Status::Closed
             };
     } else {
         // Maxim - Sell, Ernest - Buy
@@ -309,7 +264,7 @@ public entry fun settle_and_close<T>(
 
         withdraw_balance(&mut offer.balance, ctx);
 
-        offer.status = CLOSED;
+        offer.status = Status::Closed;
 
         market.update_closed_offers(object::id(offer));
 
@@ -357,7 +312,7 @@ public entry fun close(
         balance_coin.destroy_zero();
     };
 
-    offer.status = CLOSED;
+    offer.status = Status::Closed;
 
     market.update_closed_offers(object::id(offer));
 
@@ -417,24 +372,24 @@ fun add_filler(offer: &mut PartialOffer, address: address, amount: u64) {
 // ========================= Asserts
 
 fun assert_active(offer: &PartialOffer) {
-    assert!(offer.status == ACTIVE, EOfferInactive);
+    assert!(offer.status == Status::Active, EOfferInactive);
 }
 
 fun assert_fillable(offer: &PartialOffer) {
-    assert!(offer.status == ACTIVE || offer.status == PARTIAL_FILLED, EOfferInactive);
+    assert!(offer.status == Status::Active || offer.status == Status::PartialFilled, EOfferInactive);
 }
 
 fun assert_partial_filled(offer: &PartialOffer) {
-    assert!(offer.status == PARTIAL_FILLED, EOfferNotFilled);
+    assert!(offer.status == Status::PartialFilled, EOfferNotFilled);
 }
 
 fun assert_filled(offer: &PartialOffer) {
-    assert!(offer.status == FILLED, EOfferNotFilled);
+    assert!(offer.status == Status::Filled, EOfferNotFilled);
 }
 
 fun assert_closable(offer: &PartialOffer) {
     assert!(
-        offer.status == FILLED || offer.status == PARTIAL_FILLED || offer.status == PARTIAL_CANCELLED || offer.status == PARTIAL_CLOSED,
+        offer.status == Status::Filled || offer.status == Status::PartialFilled || offer.status == Status::PartialCancelled || offer.status == Status::PartialClosed,
         EOfferNotFilled,
     );
 }
@@ -502,7 +457,7 @@ fun test_payment() {
     let offer = PartialOffer {
         id,
         market_id: object::id(&market),
-        status: ACTIVE,
+        status: Status::Active,
         buy_or_sell: true,
         creator: sender,
         fillers: vec_map::empty(),
