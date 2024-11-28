@@ -11,6 +11,9 @@ use sui::coin;
 use sui::test_scenario as ts;
 use usdc::usdc::USDC;
 
+const DEFAULT_COLLATERAL_VALUE: u64 = 1_000_000;
+const DEFAULT_AMOUNT: u64 = 1000;
+
 #[test]
 fun test_fee() {
     let sender = @0xA;
@@ -22,8 +25,7 @@ fun test_fee() {
     let mut market = ts.take_shared<Market>();
 
     // 1 USDC = 10^6
-    let collateral_value = 1_000_000;
-    let amount = 1000;
+    let collateral_value = DEFAULT_COLLATERAL_VALUE;
     print(&collateral_value);
     let fee_value = collateral_value * market.fee_percentage() / 100;
     print(&fee_value);
@@ -32,9 +34,18 @@ fun test_fee() {
 
     let coin = coin::mint_for_testing<USDC>(coin_value, ts.ctx());
     let clock = clock::create_for_testing(ts.ctx());
-    single_offer::create(&mut market, true, amount, collateral_value, coin, &clock, ts.ctx());
+    single_offer::create(
+        &mut market,
+        true,
+        DEFAULT_AMOUNT,
+        collateral_value,
+        coin,
+        &clock,
+        ts.ctx(),
+    );
 
     ts.next_tx(sender);
+
     //-
 
     let offer = ts.take_shared<SingleOffer>();
