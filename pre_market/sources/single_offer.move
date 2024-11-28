@@ -12,13 +12,6 @@ use usdc::usdc::USDC;
 
 const ONE_USDC: u64 = 1_000_000;
 
-// ========================= Statuses
-//todo: Change to enum
-const ACTIVE: u8 = 0;
-const CANCELLED: u8 = 1;
-const FILLED: u8 = 2;
-const CLOSED: u8 = 3;
-
 // ========================= ERRORS =========================
 
 const EInvalidAmount: u64 = 0;
@@ -32,13 +25,20 @@ const EInvalidSettlement: u64 = 7;
 
 // ========================= STRUCTS =========================
 
+public enum Status has copy, store, drop {
+    Active,
+    Cancelled,
+    Filled,
+    Closed,
+}
+
 public struct SingleOffer has key {
     /// Offer ID
     id: UID,
     /// Market ID
     market_id: ID,
     /// Status of the offer. 0 - Active, 1 - Cancelled, 2 - Filled, 3 - Closed
-    status: u8,
+    status: Status,
     /// Is the offer buy or sell
     /// true - buy, false - sell
     buy_or_sell: bool,
@@ -99,7 +99,7 @@ public entry fun create(
     let mut offer = SingleOffer {
         id: object::new(ctx),
         market_id: object::id(market),
-        status: ACTIVE,
+        status: Status::Active,
         buy_or_sell,
         creator: ctx.sender(),
         filler: option::none(),
@@ -134,7 +134,7 @@ public entry fun cancel(offer: &mut SingleOffer, market: &mut Market, ctx: &mut 
     market.cancel_offer(object::id(offer), offer.buy_or_sell, offer.collateral_value, offer.amount);
 
     withdraw_balance(&mut offer.balance, ctx);
-    offer.status = CANCELLED;
+    offer.status = Status::Cancelled;
 
     emit(OfferCanceled { offer: object::id(offer) });
 }
@@ -166,7 +166,7 @@ public entry fun fill(
 
     coin::put(&mut offer.balance, coin);
     offer.filler = option::some(ctx.sender());
-    offer.status = FILLED;
+    offer.status = Status::Filled;
 
     emit(OfferFilled { offer: object::id(offer) });
 }
@@ -208,7 +208,7 @@ public entry fun settle_and_close<T>(
 
     withdraw_balance(&mut offer.balance, ctx);
 
-    offer.status = CLOSED;
+    offer.status = Status::Closed;
 
     market.update_closed_offers(object::id(offer));
 
@@ -241,7 +241,7 @@ public entry fun close(
 
     withdraw_balance(&mut offer.balance, ctx);
 
-    offer.status = CLOSED;
+    offer.status = Status::Closed;
 
     market.update_closed_offers(object::id(offer));
 
@@ -269,11 +269,11 @@ fun split_fee(
 }
 
 fun assert_active(offer: &SingleOffer) {
-    assert!(offer.status == ACTIVE, EOfferInactive);
+    assert!(offer.status == Status::Active, EOfferInactive);
 }
 
 fun assert_filled(offer: &SingleOffer) {
-    assert!(offer.status == FILLED, EOfferNotFilled);
+    assert!(offer.status == Status::Filled, EOfferNotFilled);
 }
 
 fun assert_creator(offer: &SingleOffer, ctx: &TxContext) {
@@ -332,7 +332,7 @@ fun test_payment() {
     let offer = SingleOffer {
         id,
         market_id: object::id(&market),
-        status: ACTIVE,
+        status: Status::Active,
         buy_or_sell: true,
         creator: sender,
         filler: option::none(),
