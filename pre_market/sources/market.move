@@ -19,13 +19,6 @@ const FEE_PERCENTAGE: u64 = 2;
 
 const PRE_MARKET_SUFFIX: vector<u8> = b"Pre Market ";
 
-// ========================= Statuses
-/// Active/Trading Phase
-const ACTIVE: u8 = 0;
-/// Settlement/Delivery Phase
-const SETTLEMENT: u8 = 1;
-const CLOSED: u8 = 2;
-
 // ========================= ERRORS =========================
 
 const ENotAuthorized: u64 = 0;
@@ -37,6 +30,12 @@ const EInvalidCoinType: u64 = 4;
 // ========================= STRUCTS =========================
 
 public struct MARKET has drop {}
+
+public enum Status has copy, store, drop {
+    Active,
+    Settlement,
+    Closed,
+}
 
 public struct Market has key {
     /// Market ID
@@ -205,13 +204,13 @@ public entry fun withdraw(market: &mut Market, cap: &Publisher, ctx: &mut TxCont
 
 // ========================= Read functions
 
-public fun status(market: &Market, clock: &Clock): u8 {
+public fun status(market: &Market, clock: &Clock): Status {
     if (market.settlement_end_timestamp_ms.is_none()) {
-        ACTIVE
+        Status::Active
     } else if (clock.timestamp_ms() <= *market.settlement_end_timestamp_ms.borrow()) {
-        SETTLEMENT
+        Status::Settlement
     } else {
-        CLOSED
+        Status::Closed
     }
 }
 
@@ -224,17 +223,17 @@ public fun get_address_offers(market: &Market, address: address): vector<ID> {
 // ========================= Write functions
 
 public(package) fun assert_active(market: &Market, clock: &Clock) {
-    assert!(market.status(clock) == ACTIVE, EMarketInactive);
+    assert!(market.status(clock) == Status::Active, EMarketInactive);
 }
 
 public(package) fun assert_settlement(market: &Market, clock: &Clock) {
-    assert!(market.status(clock) == SETTLEMENT, EMarketNotSettlement);
+    assert!(market.status(clock) == Status::Settlement, EMarketNotSettlement);
 }
 
 /// Check if the market settlement is ended
 /// And the market is ready to be closed
 public(package) fun assert_closed(market: &Market, clock: &Clock) {
-    assert!(market.status(clock) == CLOSED, EMarketNotClosed);
+    assert!(market.status(clock) == Status::Closed, EMarketNotClosed);
 }
 
 /// Check if the coin type is valid for closing the offer
