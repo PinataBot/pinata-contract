@@ -6,11 +6,11 @@ use std::type_name;
 use sui::clock;
 use sui::test_utils::destroy;
 
-public fun new(ctx: &mut TxContext) {
+public fun create_test_market(ctx: &mut TxContext) {
     let cap = market::test_claim_publisher(ctx);
     let clock = clock::create_for_testing(ctx);
 
-    market::new(&cap, b"TestTokenMarket", b"TestUrl", b"TTM", &clock, ctx);
+    market::create(&cap, b"TestTokenMarket", b"TestUrl", b"TTM", &clock, ctx);
 
     destroy(cap);
     clock.destroy_for_testing();

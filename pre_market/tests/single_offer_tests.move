@@ -2,7 +2,7 @@
 module pre_market::single_offer_tests;
 
 use pre_market::market::{Self, Market};
-use pre_market::market_tests::{Self};
+use pre_market::market_tests;
 use pre_market::single_offer::{Self, SingleOffer};
 use std::debug::print;
 use std::unit_test::assert_eq;
@@ -16,7 +16,7 @@ fun test_fee() {
     let sender = @0xA;
     let mut ts = ts::begin(sender);
 
-    market_tests::new(ts.ctx());
+    market_tests::create_test_market(ts.ctx());
     ts.next_tx(sender);
 
     let mut market = ts.take_shared<Market>();

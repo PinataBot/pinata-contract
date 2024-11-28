@@ -117,7 +117,7 @@ fun init(otw: MARKET, ctx: &mut TxContext) {
 
 // ========================= Write admin functions
 
-public entry fun new(
+public entry fun create(
     cap: &Publisher,
     name: vector<u8>,
     url: vector<u8>,
