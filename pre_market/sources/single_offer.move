@@ -294,68 +294,15 @@ fun assert_valid_settlement<T>(offer: &SingleOffer, market: &Market, coin: &Coin
     assert!(coin.value() == offer.amount * 10u64.pow(market.coin_decimals()), EInvalidSettlement);
 }
 
-// ========================= TESTS =========================
-#[test_only]
-use pre_market::market;
+
+// ========================= TEST ONLY FUNCTIONS =========================
 
 #[test_only]
-use sui::test_scenario as ts;
-#[test_only]
-use sui::test_utils::{Self, assert_eq};
-#[test_only]
-use std::debug::print;
-
-#[test]
-fun test_payment() {
-    let sender = @0xA;
-    let mut ts = ts::begin(sender);
-
-    market::create_test_market(ts::ctx(&mut ts));
-    ts::next_tx(&mut ts, sender);
-
-    let market = ts::take_shared<Market>(&ts);
-
-    // 1 USDC = 10^6
-    let collateral_value = ONE_USDC;
-    let amount = 1000;
-    print(&collateral_value);
-    let fee_value = collateral_value * market.fee_percentage() / 100;
-    print(&fee_value);
-    let coin_value = collateral_value + fee_value;
-    print(&coin_value);
-
-    let mut coin = coin::mint_for_testing<USDC>(coin_value, ts::ctx(&mut ts));
-    ts::next_tx(&mut ts, sender);
-    // print(&coin);
-
-    let id = object::new(ts::ctx(&mut ts));
-    let offer = SingleOffer {
-        id,
-        market_id: object::id(&market),
-        status: Status::Active,
-        buy_or_sell: true,
-        creator: sender,
-        filler: option::none(),
-        // price,
-        amount,
-        collateral_value,
-        balance: balance::zero(),
-        created_at_timestamp_ms: 0,
-    };
-    transfer::share_object(offer);
-    ts::next_tx(&mut ts, sender);
-
-    let offer = ts::take_shared<SingleOffer>(&ts);
-    let fee = offer.split_fee(&market, &mut coin, ts::ctx(&mut ts));
-    ts::next_tx(&mut ts, sender);
-    // print(&fee);
-
-    assert_eq(coin.value(), collateral_value);
-    assert_eq(fee.value(), fee_value);
-
-    ts::return_shared(market);
-    ts::return_shared(offer);
-    coin::burn_for_testing(coin);
-    coin::burn_for_testing(fee);
-    ts::end(ts);
+public fun test_split_fee(
+    offer: &SingleOffer,
+    market: &Market,
+    coin: &mut Coin<USDC>,
+    ctx: &mut TxContext,
+): Coin<USDC> {
+    split_fee(offer, market, coin, ctx)
 }
