@@ -2,6 +2,7 @@
 module pre_market::single_offer_tests;
 
 use pre_market::market::{Self, Market};
+use pre_market::market_tests::{Self};
 use pre_market::single_offer::{Self, SingleOffer};
 use std::debug::print;
 use std::unit_test::assert_eq;
@@ -15,7 +16,7 @@ fun test_fee() {
     let sender = @0xA;
     let mut ts = ts::begin(sender);
 
-    market::create_test_market(ts.ctx());
+    market_tests::new(ts.ctx());
     ts.next_tx(sender);
 
     let mut market = ts.take_shared<Market>();
@@ -34,16 +35,18 @@ fun test_fee() {
     single_offer::create(&mut market, true, amount, collateral_value, coin, &clock, ts.ctx());
 
     ts.next_tx(sender);
+    //-
 
     let offer = ts.take_shared<SingleOffer>();
 
     let mut test_coin = coin::mint_for_testing<USDC>(coin_value, ts.ctx());
 
     let fee = offer.test_split_fee(&market, &mut test_coin, ts.ctx());
-    ts.next_tx(sender);
 
     assert_eq!(test_coin.value(), collateral_value);
     assert_eq!(fee.value(), fee_value);
+
+    //-
 
     clock.destroy_for_testing();
     ts::return_shared(market);

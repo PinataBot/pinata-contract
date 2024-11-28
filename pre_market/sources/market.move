@@ -359,32 +359,7 @@ fun generate_market_name(name: vector<u8>): String {
     market_name
 }
 
-// ========================= TEST ONLY FUNCTIONS =========================
-
 #[test_only]
-public fun create_test_market(ctx: &mut TxContext) {
-    let market = Market {
-        id: object::new(ctx),
-        name: b"TestTokenMarket".to_string(),
-        coin_symbol: option::some(b"TTM".to_string()),
-        url: url::new_unsafe_from_bytes(b"TestUrl"),
-        fee_percentage: FEE_PERCENTAGE,
-        balance: balance::zero(),
-        created_at_timestamp_ms: 0,
-        address_offers: table::new(ctx),
-        buy_offers: table::new(ctx),
-        sell_offers: table::new(ctx),
-        filled_offers: table::new(ctx),
-        closed_offers: table::new(ctx),
-        total_buy_value: 0,
-        total_buy_amount: 0,
-        total_sell_value: 0,
-        total_sell_amount: 0,
-        total_volume: 0,
-        coin_type: option::none(),
-        coin_decimals: option::none(),
-        settlement_end_timestamp_ms: option::none(),
-    };
-
-    transfer::share_object(market);
+public fun test_claim_publisher(ctx: &mut TxContext): Publisher {
+    package::claim(MARKET {}, ctx)
 }

@@ -1,8 +1,20 @@
 #[test_only]
 module pre_market::market_tests;
 
-use pre_market::market::Market;
+use pre_market::market::{Self, Market};
 use std::type_name;
+use sui::clock;
+use sui::test_utils::destroy;
+
+public fun new(ctx: &mut TxContext) {
+    let cap = market::test_claim_publisher(ctx);
+    let clock = clock::create_for_testing(ctx);
+
+    market::new(&cap, b"TestTokenMarket", b"TestUrl", b"TTM", &clock, ctx);
+
+    destroy(cap);
+    clock.destroy_for_testing();
+}
 
 #[test]
 fun test_types_comparison() {
