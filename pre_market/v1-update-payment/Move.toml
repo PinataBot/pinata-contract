@@ -1,0 +1,46 @@
+[package]
+name = "pre_market"
+edition = "2024.beta" # edition = "legacy" to use legacy (pre-2024) Move
+license = "MIT"           # e.g., "MIT", "GPL", "Apache 2.0"
+authors = ["Pinata Wallet Team"]      # e.g., ["Joe Smith (joesmith@noemail.com)", "John Snow (johnsnow@noemail.com)"]
+
+[dependencies]
+Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-framework/packages/sui-framework", rev = "framework/mainnet" }
+# USDC = { local = "../../on_chain_deps/usdc/usdc" }
+
+# For remote import, use the `{ git = "...", subdir = "...", rev = "..." }`.
+# Revision can be a branch, a tag, and a commit hash.
+# MyRemotePackage = { git = "https://some.remote/host.git", subdir = "remote/path", rev = "main" }
+
+# For local dependencies use `local = path`. Path is relative to the package root
+# Local = { local = "../path/to" }
+
+# To resolve a version conflict and force a specific version for dependency
+# override use `override = true`
+# Override = { local = "../conflicting/version", override = true }
+
+[addresses]
+# Package address
+pre_market = "0xa5fa34030c8b223674005477c557f80557a6cd2f8130851ba763844c495bea61"
+
+publisher = "0x9360bc90f4b133d4c9a704c69493922564e184582d8e28685d286b4e86f99068"
+
+walrus_sui = "0xe0ff3471338cd3ece2a54714f7f03878361ea829792daa70e53a35a60b0bd823"
+walrus_usdc = "0xc572142c748ce3077d56b346f0078bc86fb2e33429b59f535a1ead8899a75362"
+
+
+# Markets
+
+# Named addresses will be accessible in Move as `@name`. They're also exported:
+# for example, `std = "0x1"` is exported by the Standard Library.
+# alice = "0xA11CE"
+
+[dev-dependencies]
+# The dev-dependencies section allows overriding dependencies for `--test` and
+# `--dev` modes. You can introduce test-only dependencies here.
+# Local = { local = "../path/to/dev-build" }
+
+[dev-addresses]
+# The dev-addresses section allows overwriting named addresses for the `--test`
+# and `--dev` modes.
+# alice = "0xB0B"

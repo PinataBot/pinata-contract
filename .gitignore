@@ -5,6 +5,8 @@ break_sui_pinata/build
 pre_market/.idea
 pre_market/Move.lock
 pre_market/build
+pre_market/v1/build
+pre_market/v1-update-payment/build
 split_bill/.idea
 split_bill/Move.lock
 split_bill/build
