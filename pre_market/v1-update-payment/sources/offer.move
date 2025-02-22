@@ -6,7 +6,6 @@ use sui::balance::{Self, Balance};
 use sui::clock::Clock;
 use sui::coin::{Self, Coin};
 use sui::event::emit;
-use sui::sui::SUI;
 
 // ========================= CONSTANTS =========================
 
@@ -296,9 +295,10 @@ fun assert_valid_settlement<T, C>(offer: &Offer<C>, market: &Market<C>, coin: &C
 // ========================= TESTS =========================
 #[test_only]
 use pre_market::market;
-
 #[test_only]
 use sui::test_scenario as ts;
+#[test_only]
+use sui::sui::SUI;
 
 #[test]
 fun test_payment() {

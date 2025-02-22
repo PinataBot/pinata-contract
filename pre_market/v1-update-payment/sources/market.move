@@ -7,7 +7,6 @@ use sui::clock::Clock;
 use sui::coin::{Self, Coin, CoinMetadata};
 use sui::event::emit;
 use sui::package::{Self, Publisher};
-use sui::sui::SUI;
 use sui::table::{Self, Table};
 use sui::url::{Self, Url};
 
@@ -359,6 +358,11 @@ fun generate_market_name(name: vector<u8>): String {
 // ========================= TEST ONLY FUNCTIONS =========================
 
 #[test_only]
+use sui::sui::SUI;
+#[test_only]
+use sui::test_utils::assert_eq;
+
+#[test_only]
 public fun create_test_market(ctx: &mut TxContext) {
     let market = Market<SUI> {
         id: object::new(ctx),
@@ -388,8 +392,6 @@ public fun create_test_market(ctx: &mut TxContext) {
 }
 
 // ========================= TESTS =========================
-#[test_only]
-use sui::test_utils::assert_eq;
 
 #[test]
 fun test_types_comparison() {
