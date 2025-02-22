@@ -1,8 +1,7 @@
 module pre_market::market;
 
-use pre_market::utils::withdraw_balance;
+use pre_market::utils::{withdraw_balance, type_to_string};
 use std::string::{Self, String};
-use std::type_name;
 use sui::balance::{Self, Balance};
 use sui::clock::Clock;
 use sui::coin::{Self, Coin, CoinMetadata};
@@ -49,6 +48,7 @@ public struct Market<phantom C> has key {
     fee_percentage: u64,
     /// Balance of the market
     balance: Balance<C>,
+    payment_coin_type: String,
     /// Created at timestamp in milliseconds
     created_at_timestamp_ms: u64,
     /// Symbol of the token
@@ -134,6 +134,7 @@ public entry fun new<C>(
         url: url::new_unsafe_from_bytes(url),
         fee_percentage: FEE_PERCENTAGE,
         balance: balance::zero(),
+        payment_coin_type: type_to_string<C>(),
         created_at_timestamp_ms: clock.timestamp_ms(),
         coin_symbol: option::some(symbol.to_string()),
         coin_type: option::none(),
@@ -165,8 +166,7 @@ public entry fun settlement<T, C>(
     assert_admin(cap);
 
     market.coin_symbol = option::some(string::from_ascii(coin_metadata.get_symbol()));
-    market.coin_type =
-        option::some(string::from_ascii(type_name::get_with_original_ids<T>().into_string()));
+    market.coin_type = option::some(type_to_string<T>());
     market.coin_decimals = option::some(coin_metadata.get_decimals());
     market.settlement_end_timestamp_ms = option::some(clock.timestamp_ms() + SETTLEMENT_TIME_MS);
 
@@ -240,7 +240,7 @@ public(package) fun assert_closed<C>(market: &Market<C>, clock: &Clock) {
 /// Check if the coin type is valid for closing the offer
 /// Call when market is in settlement status
 public(package) fun assert_coin_type<T, C>(market: &Market<C>) {
-    let coin_type = type_name::get_with_original_ids<T>().into_string().into_bytes();
+    let coin_type = type_to_string<T>().into_bytes();
     let market_coin_type = (*market.coin_type.borrow()).into_bytes();
 
     assert!(coin_type == market_coin_type, EInvalidCoinType);
@@ -367,6 +367,7 @@ public fun create_test_market(ctx: &mut TxContext) {
         url: url::new_unsafe_from_bytes(b"TestUrl"),
         fee_percentage: FEE_PERCENTAGE,
         balance: balance::zero(),
+        payment_coin_type: type_to_string<SUI>(),
         created_at_timestamp_ms: 0,
         address_offers: table::new(ctx),
         buy_offers: table::new(ctx),
@@ -392,8 +393,7 @@ use sui::test_utils::assert_eq;
 
 #[test]
 fun test_types_comparison() {
-    let generated_type = type_name::get_with_original_ids<Market<SUI>>().into_string();
-
+    let generated_type = type_to_string<Market<SUI>>();
     let mut hardcode_type = b"".to_string();
     hardcode_type.append(@pre_market.to_string());
     hardcode_type.append(b"::market::Market<0000000000000000000000000000000000000000000000000000000000000002::sui::SUI>".to_string());
