@@ -21,12 +21,12 @@ Sui = { git = "https://github.com/MystenLabs/sui.git", subdir = "crates/sui-fram
 
 [addresses]
 # Package address
-pre_market = "0xa5fa34030c8b223674005477c557f80557a6cd2f8130851ba763844c495bea61"
+pre_market = "0x921fb6e1c3ec786a2ec23ce1fd97edaf48b99fb288a8fdf4c0ac7062c1838980"
 
-publisher = "0x9360bc90f4b133d4c9a704c69493922564e184582d8e28685d286b4e86f99068"
+publisher = "0x6e259298b266fed86c5fd5b2412b87dc73f12d6bd0fce2c22801c9055d083acd"
 
-walrus_sui = "0xe0ff3471338cd3ece2a54714f7f03878361ea829792daa70e53a35a60b0bd823"
-walrus_usdc = "0xc572142c748ce3077d56b346f0078bc86fb2e33429b59f535a1ead8899a75362"
+walrus_sui = "0x5cee049ae573624b62df3dc2731668aeb400131d9ccce26b74d839c73fef8c69"
+walrus_usdc = "0xfa6ac0762c3ab13c2e381fdb93f6aaeb4308b926efe24bdc4ccf1d3c07ed272e"
 
 
 # Markets
